@@ -175,5 +175,5 @@ enum COMPRESSOR_TYPE {
 
 With pitch archives, it is always safe to read a 4KiB block of data.
 Data and headers are aligned on 4KiB offsets. When reading header blocks, the first record defines the size of headers in that block.
-If the first record in the block is a half record, the second half of the block will either be the contents of a file OR a complete record. 
+If the record is a half record, the second half of the block will be the complete contents of the file
 
