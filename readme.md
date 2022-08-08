@@ -4,7 +4,7 @@ pitch(1) and pitch(5) aim to replace the bad choices made in tar(1)
 
 # pitch(5)
 
-_Pitch version 0 is _
+_Pitch version 0 is considered prototype at best. Be aware of this._
 
 Pitch is a record-based, tar-like archive format with several very specific differences:
 
