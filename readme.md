@@ -228,6 +228,14 @@ of the remaining
 The checksum for a file's contents includes any padding used to align to 4K blocks; that is, all checks
 are done against the full, padded data of the file.
 
+## ZStandard Dictionaries
+
+Optionally, an archive can include a ZStandard Dictionary as a special type of file.
+All fields other than block count, modulus, and optionally checksum must be zero for these.
+
+An application must then present this to the ZStandard decoder as a dictionary for use in compression.
+
+
 ## half records
 
 With pitch archives, it is always safe to read a 4KiB block of data.
@@ -239,3 +247,14 @@ suffices, a Half Record is used. Half record filenames are limited to 768 codepo
 
 TODO
 
+# License
+
+This text is licensed under a Creative Commons CC BY-SA 4.0 license.
+For more information see https://creativecommons.org/licenses/by-sa/4.0/
+
+In short:
+
+You may adapt and share that adaptation of this standard with others,
+so long as you provide attribution and your modifications are shared under the same license.
+
+As the Creative Commons license is not easily applicable to code, the reference implementations are under a suitable license.
