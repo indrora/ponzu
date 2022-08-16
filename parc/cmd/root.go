@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
-
 */
 package cmd
 
@@ -13,8 +12,8 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "parc",
-	Short: "Parc is a reference Pitch ARChive tool",
-	Long: `Parc is a reference implementation of the Pitch Archive format.
+	Short: "Parc is a reference Ponzu ARChive tool",
+	Long: `Parc is a reference implementation of the Ponzu Archive format.
 
 	`,
 	// Uncomment the following line if your bare application

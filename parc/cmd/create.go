@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
-
 */
 package cmd
 
@@ -13,12 +12,12 @@ import (
 // createCmd represents the create command
 var createCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a Pitch archive",
+	Short: "Create a Ponzu archive",
 	Long: `Create an archive from a specified set of paths.
 	
 example:
 
-parc create myarchive.pitch a/* b/*`,
+parc create myarchive.pzarc a/* b/*`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("create called")
 
@@ -27,7 +26,7 @@ parc create myarchive.pitch a/* b/*`,
 
 func init() {
 	rootCmd.AddCommand(createCmd)
-	createCmd.Flags().BoolP("stream", "s", false, "Create streamed (noncompressed) archives")
+	createCmd.Flags().BoolP("stream", "s", false, "Create a streamed archive (no header checksum)")
 	createCmd.Flags().BoolP("no-checksum", "n", false, "Skip checksum calculation")
 	createCmd.Flags().String("comment", "", "Add comment to archive")
 }

@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
-
 */
 package cmd
 
@@ -13,8 +12,8 @@ import (
 // inspectCmd represents the inspect command
 var inspectCmd = &cobra.Command{
 	Use:   "inspect",
-	Short: "Investigate the contents of a Pitch archive",
-	Long: `Investigate and show the structure of the Pitch archive,
+	Short: "Investigate the contents of a Ponzu archive",
+	Long: `Investigate and show the structure of the Ponzu archive,
 including compression information and similar. `,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("inspect called")
