@@ -26,7 +26,7 @@ However, what makes Tar useful is that it's pretty much "read header, set idx=0,
 The constant string manipulation that has to be done as well as a quadtradic extraction time 
 for certain GNU tar files means that there are Many ways that the format could be imroved.
 
-There's other reasons to drop tar. For an interesting look at what tar is like in practice, see
+For an interesting look at what tar is like in practice, see
 
 * https://mort.coffee/home/tar/
 * https://invisible-island.net/autoconf/portability-tar.html
@@ -93,7 +93,7 @@ struct RECORD_PREAMBLE {
 }
 ```
 
-The rest of the record is a CBOR encoded body.
+The rest of the record is an [RFC 8949 Concise Binary Object Representation (CBOR)](https://www.rfc-editor.org/rfc/rfc8949) encoded body.
 If the `HALF_RECORD` flag is used, the CBOR content extends only into the first 2048 bytes.
 The CBOR content must not extend to greater than the 4KiB allotment. It is up to the
 implementation what information to exclude from the record to condense the information
@@ -103,128 +103,137 @@ to 4KiB.
 
 The following flags are used:
 
-| flag | Name | Description|
-| 1 | `HALF_RECORD` | The second half of the 4KiB block is the data portion |
-| 2 | `STREAMED_ARCHIVE` (for an SOA record) | This archive was streamed on the fly |
-| 2 | `NO_CHECKSUM` (for any other record) | This files checksum could not be computed during streaming |
+| Value   | Introduced | Name               | Name                                                                              |
+| ------- | ---------- | ------------------ | --------------------------------------------------------------------------------- |
+| `0b1`   | 1          | `HALF_RECORD`      | The second half of the 4KiB block is the data portion                             |
+| `0b10`  | 1          | `STREAMED_ARCHIVE` | (for an SOA record) This archive was streamed on the fly                          |
+| `0b10`  | 1          | `NO_CHECKSUM`      | (for any other record) This files checksum could not be computed during streaming |
+| `0b100` | 1          | `STAMPED`          | This record has been postfacto checksummed                                        |
 
 All flags above `0x7F` are reserved for use by implementations. 
-
-
-```c
-enum HEADER_FLAGS {
-    NONE = 0b0,
-    HALF_RECORD  = 0b1,
-    STREAMED_ARCHIVE = 0b10,
-    NO_CHECKSUM      = 0b10,
-    // other values reserved
-} header_flags;
-```
 
 ## Record Types
 
 All Ponzu record bodies are encoded as CBOR bodies.
 
-Several 
+The defined record types are
 
-
-```c
-enum RECORD_TYPE {
-    SOA = 0,         // This is a header (at the start of an archive)
-    FILE = 1,               // This is a normal, regular file
-    SYMLINK = 2,            // This is a symlink to a file
-    HARDLINK = 3,           // This is a hardlink to a file
-    DIRECTORY = 4,          // This is a directory that should be created.
-    ZSTD_DICT = 5,        // ZStandard Dictionary 
-    OS_SPECIAL = 0x7F   // This is a file that the OS knows how to make
-    RESERVED = 0xF0;    // All values above 127 are "reserved" for implementations.
-} rtype;
-```
+| Value | Introduced | Name                 | Description                                                     |
+| ----- | ---------- | -------------------- | --------------------------------------------------------------- |
+| 0     | 1          | SOA                  | Start of Archive: indicates new archive context parameters.     |
+| 1     | 1          | File                 | A regular file.                                                 |
+| 2     | 1          | Symlink              | A symbolic link to a path                                       |
+| 3     | 1          | Hardlink             | A hard link to a specific inode                                 |
+| 4     | 1          | Directory            | A directory                                                     |
+| 5     | 1          | Zstandard Dictionary | Dictionary for ZStandard to use during decompression.           |
+| 127   | 1          | OS Special           | An OS-Special inode                                             |
+| >127  | 1          | Reserved             | All values > 127 are reserved for implementation defined usage. |
 
 ### Start Of Archive (0)
 
 The Start of Archive record is used to define the paramters of an archive. 
 
-| index | type | Description |
-|-------|------|----------------------------|
-| 0     | Uint8 | Version of the Ponzu spec this archive conforms to |
-| 1     | string | Host OS type that this archive was created on |
-| 2     | uint8 | Compression type used in records |
-| 3     | string | Prefix used by all files in this archive |
-| 4     | string  | Comment, text |
+| Name    | Key | since | type   | Description                                        |
+| ------- | --- | ----- | ------ | -------------------------------------------------- |
+| version | 0   | 1     | Uint8  | Version of the Ponzu spec this archive conforms to |
+| host    | 1   | 1     | string | Host OS type that this archive was created on      |
+| prefix  | 2   | 1     | string | Prefix used by all files in this archive           |
+| comment | 3   | 1     | string | Comment, text                                      |
+
+Optionally, the following fields might appear:
+
+| Name   | index | since | type | Description                                         |
+| ------ | ----- | ----- | ---- | --------------------------------------------------- |
+| uidmap | -1    | 1     | map  | Mapping of UID numbers to user names (e.g. for NFS) |
+
 
 ### File
 
-| index | type      | Description               |
-|-------|-----------|---------------------------|
-| 0     | string    | filename                  |
-| 1     | uint16    | File permissions          |
-| 2     | timestamp | Modified time of the file |
-| 3     | map       | OS-Specific attributes    |
+| Name            | Key | Since | type      | Description                         |
+| --------------- | --- | ----- | --------- | ----------------------------------- |
+| name            | 0   | 1     | string    | filename                            |
+| mode            | 1   | 1     | uint16    | File permissions (chmod compatible) |
+| owner           | 2   | 1     | string    | Owning user                         |
+| group           | 3   | 1     | string    | Owning Group                        |
+| mTime           | 4   | 1     | timestamp | Modified time of the file           |
+| compressionType | 5   | 1     | integer   | Record compression type             |
+| osMetadata      | 6   | 1     | map       | OS-Specific attributes              |
 
-### Symlink
+### Symlinks and Hardlinks
 
-Symlinks use all the same indexes as a file, adding
+Links are Files with no data section and the following fields:
 
-| index | type | Description | 
-| 4 | string | Link target |
-
-### Hardlink 
-
-Hardlinks use the same structure as a Symlink.
+| Name       | Key | Since | type   | Description |
+| ---------- | --- | ----- | ------ | ----------- |
+| linkTarget | -1  | 1     | string | Link target |
 
 ### Directories
 
-A Directory has all the fields of a File
+A directory is a File record but with a zero length and zero modulus.
+
 
 ### ZStandard Dictionary
 
 a ZStandard Dictionary has no specific fields, however the following optional fields
 may be included:
 
-| index | type | Description |
-| 0 | string | Version of ZStandard that created this dictionary, if known |
+| Name    | Key | Since | type   | Description                                                 |
+| ------- | --- | ----- | ------ | ----------------------------------------------------------- |
+| version | 0   | 1     | string | Version of ZStandard that created this dictionary, if known |
+
+ZStandard dictionaries *must not* be compressed. 
+
+When a Dictionary record is received, the old dictionary (if any) should be discarded.
 
 ### OS Special
 
 For operating systems that support "Special" files (e.g. FIFOs, device nodes, etc),
 this type is used. These files generally do not contain "data". 
 
-| index | type | Description |
-| 0 | string | "mknod" or other. |
-| 10 | u32 | Mode for mknod |
-| 11 | u32 | Dev_t value for mknod |
-
+| Name      | index | Since | type   | Description                 |
+| --------- | ----- | ----- | ------ | --------------------------- |
+| type      | -1    | 1     | string | only "mknod" valid for now. |
+| mknodMode | -     | 1     | u32    | Mode for mknod              |
+| mknodDev  | -     | 1     | u32    | Dev_t value for mknod       |
 
 
 ## Compression
 
-Compression is handled on a per-file basis. 
+Compression is handled on a per-file basis.
 
-```c
-enum COMPRESSOR_TYPE {
-    NONE = 0,
-    ZSTD = 1,
-    BROTLI = 2,
-} compressor_type
-```
+| value | Since | name      | Info                             |
+| ----- | ----- | --------- | -------------------------------- |
+| 0     | 1     | None      |                                  |
+| 1     | 1     | ZStandard | https://facebook.github.io/zstd/ |
+| 2     | 1     | Brotli    | https://github.com/google/brotli |
+
 
 ## Host Operating System 
 
-host operating systems:
-```c
-#define HOST_OS_LINUX = "linux"
-#define HOST_OS_UNIX  = "unix"
-#define HOST_OS_SELINUX = "selinux"
-#define HOST_OS_NT ="winnt"
-#define HOST_OS_GENERIC = "universe"
-#define HOST_OS_DARWIN  = "darwin"
-```
+The following operating systems might show up:
+
+* `linux` - A typical Linux system
+* `unix`  - A UNIX/BSD system
+* `winnt` - A Windows NT system, such as Windows 11
+* `darwin` - A MacOS/Darwin system
+* `universe` - A generic, know-nothing system.
 
 ### About the _Universe_ value: 
 
 The `universe` value is presented as a generic: Archives with the "Universe" machine are treated more or less like
 large file supporting tar archives with checksums. No file attribute metadata should be inferred.
+
+## Handling archives from foreign systems and future versions.
+
+When an implementation encounters an archive that uses an unknown or unexpressable
+a compliant archive utility SHOULD provide a mechanism to extract the foreign or unknown
+information alongside the data portion. 
+
+If an implementation encounters an unknown compression format or file record, it SHOULD extract the data segment
+of the record AS-IS, writing the content to an unambiguous filename (e.g. `filename.ponzu_data`)
+
+A compliant *library* implementation MUST provide a way to inspect the archive record itself, including CBOR data,
+whenever the user wants it. 
 
 ## Streamed Archives
 
@@ -242,24 +251,60 @@ All filenames in Pitch are UTF-8 encoded.
 
 ## Byte Order
 
-All values shall be Big-Endian ("Network Order"). 
+All values shall be Big-Endian ("Network Order"), as defined by RFC8949.
 
 ## Checksums
 
-All checksums in version 1 of Pitch are SHA3-512.
-If a checksum is all zero, it's considered "unknown" or "uncalculated".
-Unkown checksums are not invalid -- they are simply considered unreliable. 
-Some types, such as symlinks, have no checksum (how does one checksum a symlink?)
+All checksums in version 1 of Ponzu are SHA3-512 as defined by [FIPS PUB 202](https://csrc.nist.gov/publications/detail/fips/202/final).
 
-An archive may have its contents postfacto checked.
+If a checksum is all zero, it's considered "unknown" or "uncalculated".
+Unknown checksums are not invalid -- they are simply considered unreliable. 
+
+An archive may have its contents postfacto checked. 
 
 The checksum for a complete archive is made by skipping the first 4K (the archive header) and computing the checksum
 of the remaining 
 The checksum for a file's contents includes any padding used to align to 4K blocks; that is, all checks
 are done against the full, padded data of the file.
 
+# Appendix: Structures for Metadata maps
 
-# License
+This section describes the metadata mapping used for each operating system.
+
+All metadata entries are optional. 
+## Common
+
+| Key   | index | type | Since | Description         |
+| ----- | ----- | ---- | ----- | ------------------- |
+| xattr | -     | map  | 1     | Extended Attributes |
+
+
+
+## Linux
+
+| Name            | index | Since | type                   | Description     |
+| --------------- | ----- | ----- | ---------------------- | --------------- |
+| selinux_label   | -     | 1     | string                 | SELinux label   |
+| selinux_context | -     | 1     | string                 | SELinux Context |
+| caps            | -     | 1     | uint64 |Linux capability flags |
+
+
+## UNIX/BSD
+
+Nothing special for UNIX/BSD
+
+## WinNT
+
+| Name       | index | type   | Description           |
+| ---------- | ----- | ------ | --------------------- |
+| sddlString | -     | string | SDDL ACL for the file |
+
+
+## MacOS
+
+Nothing special for MacOS...
+
+# Appendix: License
 
 This text is licensed under a Creative Commons CC BY-SA 4.0 license.
 For more information see https://creativecommons.org/licenses/by-sa/4.0/
