@@ -87,6 +87,7 @@ A C implementation of the standard might use something like this:
 struct RECORD_PREAMBLE {
     uint8_t  magic[6];        // "PONZU\0"
     uint8_t  record_type;     // 0 = SOA, 1 = file, etc.
+    uint16_t flags;           // Flag Set
     uint64_t data_len;        // # of blocks to read
     uint16_t modulo;          // # of bytes to use in last block
     uint8_t  checksum[64];    // SHA3-512 checksum.
@@ -110,7 +111,7 @@ The following flags are used:
 | `0b10`  | 1          | `NO_CHECKSUM`      | (for any other record) This files checksum could not be computed during streaming |
 | `0b100` | 1          | `STAMPED`          | This record has been postfacto checksummed                                        |
 
-All flags above `0x7F` are reserved for use by implementations. 
+Flags outside the mask of `0x00FF` are resered for implementation specific flags.
 
 ## Record Types
 
@@ -140,6 +141,9 @@ The Start of Archive record is used to define the paramters of an archive.
 | prefix  | 2   | 1     | string | Prefix used by all files in this archive           |
 | comment | 3   | 1     | string | Comment, text                                      |
 
+> Note: The prefix MUST NOT begin with a leading `/` and any compliant implementation MUST discard a leading slash
+> unless the implementation gives a mechanism to "trust" the archive.
+
 Optionally, the following fields might appear:
 
 | Name   | index | since | type | Description                                         |
@@ -159,6 +163,9 @@ Optionally, the following fields might appear:
 | compressionType | 5   | 1     | integer   | Record compression type             |
 | osMetadata      | 6   | 1     | map       | OS-Specific attributes              |
 
+Paths in Ponzu archives MUST NOT contain . or .. characters except for symlink targets. 
+Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
+
 ### Symlinks and Hardlinks
 
 Links are Files with no data section and the following fields:
@@ -166,6 +173,8 @@ Links are Files with no data section and the following fields:
 | Name       | Key | Since | type   | Description |
 | ---------- | --- | ----- | ------ | ----------- |
 | linkTarget | -1  | 1     | string | Link target |
+
+Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`. 
 
 ### Directories
 
@@ -188,7 +197,7 @@ When a Dictionary record is received, the old dictionary (if any) should be disc
 ### OS Special
 
 For operating systems that support "Special" files (e.g. FIFOs, device nodes, etc),
-this type is used. These files generally do not contain "data". 
+this type is used. These files generally do not contain "data".
 
 | Name      | index | Since | type   | Description                 |
 | --------- | ----- | ----- | ------ | --------------------------- |
@@ -221,28 +230,24 @@ The following operating systems might show up:
 ### About the _Universe_ value: 
 
 The `universe` value is presented as a generic: Archives with the "Universe" machine are treated more or less like
-large file supporting tar archives with checksums. No file attribute metadata should be inferred.
+large file supporting tar archives with checksums. No file attribute metadata should be inferred or included.
 
 ## Handling archives from foreign systems and future versions.
 
-When an implementation encounters an archive that uses an unknown or unexpressable
+When an implementation encounters an archive that uses an unknown or future version of the specification,
 a compliant archive utility SHOULD provide a mechanism to extract the foreign or unknown
 information alongside the data portion. 
 
-If an implementation encounters an unknown compression format or file record, it SHOULD extract the data segment
+If an implementation encounters an unknown compression format or file record, it SHOULD provide a means to extract the data segment
 of the record AS-IS, writing the content to an unambiguous filename (e.g. `filename.ponzu_data`)
-
-A compliant *library* implementation MUST provide a way to inspect the archive record itself, including CBOR data,
-whenever the user wants it. 
 
 ## Streamed Archives
 
-Streamed archives are special. Astute readers will notice that NO_CHECKSUM and STREAMED_ARCHIVE have the same value.
-Streamed archives will not have the time to know ahead of time what the checksum of the compressed data is, how long
-the archive is going to be, etc. 
+Streamed archives are generated on the fly or in situations where seeking back through the file is not reasonable (e.g.
+because it is a TCP socket, TTY, etc). The header will have an all-zero checksum in these situations.
 
-Streamed archives may be comprised of precomputed file records, in which the precomputed checksum may be already known.
-In these cases, an individual file record may have a checksum.
+Streamed archives may be comprised of precomputed file records, in which the precomputed checksum is known.
+In these cases, an individual file record may have a checksum, but a checksum of all 0 should be accepted.
 A streamed archive may be verified post-facto and have its checksums "stamped" upon it. 
 
 ## Character encoding
@@ -253,6 +258,24 @@ All filenames in Pitch are UTF-8 encoded.
 
 All values shall be Big-Endian ("Network Order"), as defined by RFC8949.
 
+# Security
+
+A common vulnerability in Tar and other formats is path traversal attacks. These attacks are often
+the result of something similar to files named `../../../../../etc/sshd/authorized-keys` and the like.
+
+Ponzu considers these paths invalid in compliant implementations. A Ponzu archive must only create a sub-tree. 
+This may concern those who maintain package management around tar: Traditionally, package systems built around
+tar have used relative paths or paths of / to start the archive.
+
+All Ponzu archives are given a prefix. This prefix could be interpeted as a suggestion -- e.g. an archive with
+the prefix `libgizmo-1.33.7` may be overridden with simply `libgizmo` or even ignored should the implementation
+decide to do so. Should an implementation wish, it could override the prefix with no or little ill effect. 
+
+Not described here is verifying archive authenticity or provenance. A compliant implementation may add additional
+records for such things as digital signatures. Additional, implementation-dependant keys may be added to the Start
+of Archive record to add a digial signature for the complete archive, for instance. This is not covered in version 1
+of this specification. 
+
 ## Checksums
 
 All checksums in version 1 of Ponzu are SHA3-512 as defined by [FIPS PUB 202](https://csrc.nist.gov/publications/detail/fips/202/final).
@@ -260,18 +283,21 @@ All checksums in version 1 of Ponzu are SHA3-512 as defined by [FIPS PUB 202](ht
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
 Unknown checksums are not invalid -- they are simply considered unreliable. 
 
-An archive may have its contents postfacto checked. 
-
 The checksum for a complete archive is made by skipping the first 4K (the archive header) and computing the checksum
-of the remaining 
-The checksum for a file's contents includes any padding used to align to 4K blocks; that is, all checks
-are done against the full, padded data of the file.
+of the remaining data until a new Start of Archive header is found. The checksum of any given data segment is defined
+as the SHA3-512 checksum of 4KiB*blockcount bytes adfter the header ends.
+
+A compliant implementation SHOULD verify the contents of all data segments, even if their type is not known.
+A compliant implementation MUST verify the contents of all data segments of which their type is known.
+A compliant implementation SHOULD set the STAMPED flag on any records which have had their checksum updated from a zero state.
+A compliant implementation MUST NOT alter the checksum of an already checksummed segment. 
+
 
 # Appendix: Structures for Metadata maps
 
 This section describes the metadata mapping used for each operating system.
 
-All metadata entries are optional. 
+All metadata entries are optional.
 ## Common
 
 | Key   | index | type | Since | Description         |
@@ -291,7 +317,7 @@ All metadata entries are optional.
 
 ## UNIX/BSD
 
-Nothing special for UNIX/BSD
+*No additional metadata is kept with UNIX/BSD systems.*
 
 ## WinNT
 
@@ -299,10 +325,9 @@ Nothing special for UNIX/BSD
 | ---------- | ----- | ------ | --------------------- |
 | sddlString | -     | string | SDDL ACL for the file |
 
+## MacOS/Darwin
 
-## MacOS
-
-Nothing special for MacOS...
+*No additional metadata is kept with MacOS/Darwin.*
 
 # Appendix: License
 
