@@ -25,7 +25,7 @@ Reading through the tar specification is a blast:
 
 However, what makes Tar useful is that it's pretty much "read header, set idx=0, crank the read head".
 The constant string manipulation that has to be done as well as a quadtradic extraction time 
-for certain GNU tar files means that there are Many ways that the format could be imroved.
+for certain GNU tar files means that there are Many ways that the format could be improved.
 
 For an interesting look at what tar is like in practice, see
 
