@@ -1,7 +1,6 @@
 package ioutil
 
 import (
-	"errors"
 	"io"
 
 	"github.com/klauspost/compress/zstd"
@@ -29,8 +28,8 @@ type ZstdWriter struct {
 
 func (compressor ZstdWriter) Copy(reader io.Reader, writer io.Writer) (int64, error) {
 
-	zWriter := &zstd.Encoder{}
-	err := errors.New("")
+	zWriter := (*zstd.Encoder)(nil)
+	err := (error)(nil)
 	if compressor.Dictionary == nil {
 
 		zWriter, err = zstd.NewWriter(writer)
@@ -50,5 +49,5 @@ func (compressor ZstdWriter) Copy(reader io.Reader, writer io.Writer) (int64, er
 type BrotliWriter struct{}
 
 func (compressor BrotliWriter) Copy(reader io.Reader, writer io.Writer) (int64, error) {
-
+	return 0, nil
 }

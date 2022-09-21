@@ -21,6 +21,7 @@ Reading through the tar specification is a blast:
 * Two kinds of tar archives (three if you consider GNU)
 * The end of the file is marked with several zero-filled records
 * Extensions. `pad[12]`. `devmajor`/`devminor`. 
+* `../../../../../../../etc/passwd` and other tarbombs
 
 However, what makes Tar useful is that it's pretty much "read header, set idx=0, crank the read head".
 The constant string manipulation that has to be done as well as a quadtradic extraction time 
@@ -62,7 +63,7 @@ By considering compression a *built-in feature*, certain things can be improved 
 
 By taking into consideration the source and host operating system, more information can be archived with less loss of fidelity (e.g. Windows SIDs).
 
-# The Ponzu(5) format:
+# The Ponzu archive format, summary
 
 Ponzu archives are comprised of *records*. Records come in two sizes:
 
@@ -77,9 +78,7 @@ Each Ponzu record is headed by a Preamble containing:
 * A two-byte (uint16_t) flag field. 
 * A uint64_t defining the length of the data segment to follow
 * A uint16_t defining the number of bytes used in the final data segment
-* A 64-byte (512 bits) SHA3-512 checksum of the relevant scope:
-   - For a Start of Archive record, the bytes following the SOA record until the next SOA record is read
-   - For all other records, the content of the data segment of the record. 
+* A 64-byte (512 bits) SHA3-512 checksum of the relevant scope (see [Checksums](#checksums))
 
 A C implementation of the standard might use something like this:
 
@@ -99,6 +98,28 @@ If the `HALF_RECORD` flag is used, the CBOR content extends only into the first 
 The CBOR content must not extend to greater than the 4KiB allotment. It is up to the
 implementation what information to exclude from the record to condense the information
 to 4KiB.
+
+Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
+
+Paths (including the archive prefix) in Ponzu archives MUST be forward-relative except for symlink targets. 
+A forward-relative path is a path which refers only to a child, not any sibling, cousin, or parent path.
+Examples of valid forward-relative paths include:
+
+* `coconuts/bunches/lovely.jpg` (a prefectly reasonable path)
+* `pools/../cheeses/Wensleydale.tiff` (does not go below the "current" path)
+* `heads/talking/` (regular path to a directory)
+
+Examples of invalid forward-relative paths include
+
+* `kittens/../../dogs/puppies/newfoundland.jpg` (Creates a sibling)
+* `./../bob/` (another parent directory acccess)
+* `../x` (parent directory access)
+
+A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default. 
+A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, "defused"
+archive which contains no relative paths at all.
+A compliant implementation MUST default to writing only non-relative paths.
+
 
 ## Header Flags
 
@@ -144,12 +165,6 @@ The Start of Archive record is used to define the paramters of an archive.
 > Note: The prefix MUST NOT begin with a leading `/` and any compliant implementation MUST discard a leading slash
 > unless the implementation gives a mechanism to "trust" the archive.
 
-Optionally, the following fields might appear:
-
-| Name   | index | since | type | Description                                         |
-| ------ | ----- | ----- | ---- | --------------------------------------------------- |
-| uidmap | -1    | 1     | map  | Mapping of UID numbers to user names (e.g. for NFS) |
-
 
 ### File
 
@@ -162,9 +177,6 @@ Optionally, the following fields might appear:
 | mTime           | 4   | 1     | timestamp | Modified time of the file           |
 | compressionType | 5   | 1     | integer   | Record compression type             |
 | osMetadata      | 6   | 1     | map       | OS-Specific attributes              |
-
-Paths in Ponzu archives MUST NOT contain . or .. characters except for symlink targets. 
-Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
 
 ### Symlinks and Hardlinks
 
@@ -263,7 +275,7 @@ All values shall be Big-Endian ("Network Order"), as defined by RFC8949.
 A common vulnerability in Tar and other formats is path traversal attacks. These attacks are often
 the result of something similar to files named `../../../../../etc/sshd/authorized-keys` and the like.
 
-Ponzu considers these paths invalid in compliant implementations. A Ponzu archive must only create a sub-tree. 
+Ponzu considers these paths unsafe. A Ponzu archive must only create a sub-tree. 
 This may concern those who maintain package management around tar: Traditionally, package systems built around
 tar have used relative paths or paths of / to start the archive.
 
@@ -279,6 +291,12 @@ of this specification.
 ## Checksums
 
 All checksums in version 1 of Ponzu are SHA3-512 as defined by [FIPS PUB 202](https://csrc.nist.gov/publications/detail/fips/202/final).
+
+The value of the checksum is either:
+
+* For full 4K records with a zero length, the SHA3-512 of the CBOR data.
+* For full 4K records with a nonzero length, the SHA3-512 of the data and portion
+* For half (2K) records with a non-zero length, the SHA3-512 of the data portion.
 
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
 Unknown checksums are not invalid -- they are simply considered unreliable. 

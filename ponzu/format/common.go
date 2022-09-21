@@ -1,24 +1,29 @@
 package format
 
+import (
+	"encoding/binary"
+	"io"
+)
+
 type PTimestamp uint64
 
 /*
 
-The preamble
-struct RECORD_PREAMBLE {
-    uint8_t  magic[6];        // "PONZU\0"
-    uint8_t  record_type;     // 0 = SOA, 1 = file, etc.
-    uint64_t data_len;        // # of blocks to read
-    uint16_t modulo;          // # of bytes to use in last block
-    uint8_t  checksum[64];    // SHA3-512 checksum.
-}
+This preamble is in the first little bit of the record.
 
 */
 
 const (
 	PREAMBLE_STRING = "PONZU"
+	PONZU_VERSION   = 1
 )
 
+var (
+	PREAMBLE_BYTES = []byte{'P', 'O', 'N', 'Z', 'U', 0}
+)
+
+type RecordType uint8
+type RecordFlags uint16
 type Preamble struct {
 	// Magic value, must be PREAMBLE_STRING
 	Magic [6]byte
@@ -34,9 +39,47 @@ type Preamble struct {
 	Checksum [64]byte
 }
 
-type RecordType uint8
-type RecordFlags uint16
-type CompressionType uint8
+func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
+
+	bcount := uint64(0)
+	modulo := uint16(0)
+	if length < uint64(BLOCK_SIZE) {
+		bcount = 0
+		modulo = uint16(length)
+	} else {
+		bcount = 1 + (length / uint64(BLOCK_SIZE))
+		modulo = uint16(length % uint64(BLOCK_SIZE))
+	}
+
+	return Preamble{
+		Magic:    [6]byte{'P', 'O', 'N', 'Z', 'U', 0},
+		Rtype:    rType,
+		Flags:    flags,
+		Checksum: [64]byte{0},
+		// computed fields
+		DataLen: bcount,
+		Modulo:  modulo,
+	}
+}
+
+func (p *Preamble) ToBytes() []byte {
+
+	bbuf := make([]byte, 0)
+	bbuf = append(bbuf, PREAMBLE_BYTES...)
+	bbuf = append(bbuf, byte(p.Rtype), byte(p.Flags))
+	bbuf = binary.BigEndian.AppendUint64(bbuf, p.DataLen)
+	bbuf = binary.BigEndian.AppendUint16(bbuf, p.Modulo)
+	bbuf = append(bbuf, p.Checksum[:]...)
+
+}
+
+func (p *Preamble) WritePreamble(w io.Writer) {
+
+	binary.Write(w, binary.BigEndian, p.Magic)
+	binary.Write(w, binary.BigEndian, p.Rtype)
+	binary.Write(w, binary.BigEndian, p.Flags)
+	binary.Write(w, binary.BigEndian, p.Checksum)
+}
 
 const BLOCK_SIZE int64 = 4096
 
@@ -56,6 +99,8 @@ const (
 	RECORD_FLAG_STREAMED  RecordFlags = 0b10
 	RECORD_FLAG_NO_CHKSUM RecordFlags = 0b10
 )
+
+type CompressionType uint8
 
 const (
 	COMPRESSION_NONE   CompressionType = 0
