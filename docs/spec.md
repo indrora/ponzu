@@ -78,7 +78,7 @@ Each Ponzu record is headed by a Preamble containing:
 * A two-byte (uint16_t) flag field. 
 * A uint64_t defining the length of the data segment to follow
 * A uint16_t defining the number of bytes used in the final data segment
-* A 64-byte (512 bits) SHA3-512 checksum of the relevant scope (see [Checksums](#checksums))
+* A 64-byte (512 bits) BLAKE2b-512 checksum of the relevant scope (see [Checksums](#checksums))
 
 A C implementation of the standard might use something like this:
 
@@ -89,7 +89,7 @@ struct RECORD_PREAMBLE {
     uint16_t flags;           // Flag Set
     uint64_t data_len;        // # of blocks to read
     uint16_t modulo;          // # of bytes to use in last block
-    uint8_t  checksum[64];    // SHA3-512 checksum.
+    uint8_t  checksum[64];    // BLAKE2b-512 checksum.
 }
 ```
 
@@ -129,7 +129,6 @@ The following flags are used:
 | ------- | ---------- | ------------------ | --------------------------------------------------------------------------------- |
 | `0b1`   | 1          | `HALF_RECORD`      | The second half of the 4KiB block is the data portion                             |
 | `0b10`  | 1          | `STREAMED_ARCHIVE` | (for an SOA record) This archive was streamed on the fly                          |
-| `0b10`  | 1          | `NO_CHECKSUM`      | (for any other record) This files checksum could not be computed during streaming |
 | `0b100` | 1          | `STAMPED`          | This record has been postfacto checksummed                                        |
 
 Flags outside the mask of `0x00FF` are resered for implementation specific flags.
@@ -140,16 +139,20 @@ All Ponzu record bodies are encoded as CBOR bodies.
 
 The defined record types are
 
-| Value | Introduced | Name                 | Description                                                     |
-| ----- | ---------- | -------------------- | --------------------------------------------------------------- |
-| 0     | 1          | SOA                  | Start of Archive: indicates new archive context parameters.     |
-| 1     | 1          | File                 | A regular file.                                                 |
-| 2     | 1          | Symlink              | A symbolic link to a path                                       |
-| 3     | 1          | Hardlink             | A hard link to a specific inode                                 |
-| 4     | 1          | Directory            | A directory                                                     |
-| 5     | 1          | Zstandard Dictionary | Dictionary for ZStandard to use during decompression.           |
-| 127   | 1          | OS Special           | An OS-Special inode                                             |
-| >127  | 1          | Reserved             | All values > 127 are reserved for implementation defined usage. |
+| Value | Introduced | Name                 | Description                                                     | Length    |
+| ----- | ---------- | -------------------- | --------------------------------------------------------------- | --------- |
+| 0     | 1          | SOA                  | Start of Archive: indicates new archive context parameters.     | 0         |
+| 1     | 1          | File                 | A regular file.                                                 | Varies    |
+| 2     | 1          | Symlink              | A symbolic link to a path                                       | 0         |
+| 3     | 1          | Hardlink             | A hard link to a specific inode                                 | 0         |
+| 4     | 1          | Directory            | A directory                                                     | 0         |
+| 5     | 1          | Zstandard Dictionary | Dictionary for ZStandard to use during decompression.           | Varies    |
+| 126   | 1          | OS Special           | An OS-Special inode                                             | 0         |
+| 127   | 1          | Continuation block   | Continuation of the previous record                             | Varies    |
+| >127  | 1          | Reserved             | All values > 127 are reserved for implementation defined usage. | arbitrary |
+
+
+Here, length is specified as the number of data blocks after the record header. 
 
 ### Start Of Archive (0)
 
@@ -192,7 +195,6 @@ Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`.
 
 A directory is a File record but with a zero length and zero modulus.
 
-
 ### ZStandard Dictionary
 
 a ZStandard Dictionary has no specific fields, however the following optional fields
@@ -217,6 +219,15 @@ this type is used. These files generally do not contain "data".
 | mknodMode | -     | 1     | u32    | Mode for mknod              |
 | mknodDev  | -     | 1     | u32    | Dev_t value for mknod       |
 
+### Continuation Block
+
+A Continuation Block is specifically intended for several situations:
+
+* Filesystems where >4GB files are not allowed, but an uncompressed >4GB file must be described
+* Streamed archives where integrity must be assured during transit
+* Data where it is infeasible to calculate a checksum for the full body in a reasonable amount of time
+
+Continuation blocks have no body.
 
 ## Compression
 
@@ -256,7 +267,7 @@ of the record AS-IS, writing the content to an unambiguous filename (e.g. `filen
 ## Streamed Archives
 
 Streamed archives are generated on the fly or in situations where seeking back through the file is not reasonable (e.g.
-because it is a TCP socket, TTY, etc). The header will have an all-zero checksum in these situations.
+because it is a TCP socket, TTY, etc).
 
 Streamed archives may be comprised of precomputed file records, in which the precomputed checksum is known.
 In these cases, an individual file record may have a checksum, but a checksum of all 0 should be accepted.
@@ -290,23 +301,20 @@ of this specification.
 
 ## Checksums
 
-All checksums in version 1 of Ponzu are SHA3-512 as defined by [FIPS PUB 202](https://csrc.nist.gov/publications/detail/fips/202/final).
+All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
 
 The value of the checksum is either:
 
-* For full 4K records with a zero length, the SHA3-512 of the CBOR data.
-* For full 4K records with a nonzero length, the SHA3-512 of the data and portion
-* For half (2K) records with a non-zero length, the SHA3-512 of the data portion.
+* For full 4K records with a zero length, the BLAKE2b-512 of the CBOR data
+* For full 4K records with a nonzero length, the BLAKE2b-512 of the data and portion
+* For half (2K) records with a non-zero length, the BLAKE2b-512 of the data portion.
 
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
-Unknown checksums are not invalid -- they are simply considered unreliable. 
-
-The checksum for a complete archive is made by skipping the first 4K (the archive header) and computing the checksum
-of the remaining data until a new Start of Archive header is found. The checksum of any given data segment is defined
-as the SHA3-512 checksum of 4KiB*blockcount bytes adfter the header ends.
+Unknown checksums are not invalid -- they are simply considered unverified. 
 
 A compliant implementation SHOULD verify the contents of all data segments, even if their type is not known.
 A compliant implementation MUST verify the contents of all data segments of which their type is known.
+
 A compliant implementation SHOULD set the STAMPED flag on any records which have had their checksum updated from a zero state.
 A compliant implementation MUST NOT alter the checksum of an already checksummed segment. 
 
@@ -326,11 +334,11 @@ All metadata entries are optional.
 
 ## Linux
 
-| Name            | index | Since | type                   | Description     |
-| --------------- | ----- | ----- | ---------------------- | --------------- |
-| selinux_label   | -     | 1     | string                 | SELinux label   |
-| selinux_context | -     | 1     | string                 | SELinux Context |
-| caps            | -     | 1     | uint64 |Linux capability flags |
+| Name            | index | Since | type   | Description            |
+| --------------- | ----- | ----- | ------ | ---------------------- |
+| selinux_label   | -     | 1     | string | SELinux label          |
+| selinux_context | -     | 1     | string | SELinux Context        |
+| caps            | -     | 1     | uint64 | Linux capability flags |
 
 
 ## UNIX/BSD
