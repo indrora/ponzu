@@ -303,12 +303,7 @@ of this specification.
 
 All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
 
-The value of the checksum is either:
-
-* For full 4K records with a zero length, the BLAKE2b-512 of the CBOR data
-* For full 4K records with a nonzero length, the BLAKE2b-512 of the data and portion
-* For half (2K) records with a non-zero length, the BLAKE2b-512 of the data portion.
-
+The value of the checksum is the CBOR data plus any body portion.
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
 Unknown checksums are not invalid -- they are simply considered unverified. 
 
