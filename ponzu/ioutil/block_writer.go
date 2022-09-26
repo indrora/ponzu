@@ -8,12 +8,12 @@ import (
 )
 
 type BlockWriter struct {
-	writer io.WriteCloser
+	writer io.Writer
 	modulo int64
 	bsize  int64
 }
 
-func NewBlockWriter(destination io.WriteCloser, blockSize int64) *BlockWriter {
+func NewBlockWriter(destination io.Writer, blockSize int64) *BlockWriter {
 	return &BlockWriter{
 		writer: destination,
 		bsize:  blockSize,
@@ -50,6 +50,10 @@ func (k *BlockWriter) Align() error {
 
 func (k *BlockWriter) Close() error {
 	k.Align()
-	return k.writer.Close()
 
+	if closer, ok := k.writer.(io.Closer); ok {
+		return closer.Close()
+	} else {
+		return nil
+	}
 }

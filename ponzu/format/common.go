@@ -70,6 +70,7 @@ func (p *Preamble) ToBytes() []byte {
 	bbuf = binary.BigEndian.AppendUint64(bbuf, p.DataLen)
 	bbuf = binary.BigEndian.AppendUint16(bbuf, p.Modulo)
 	bbuf = append(bbuf, p.Checksum[:]...)
+	return bbuf
 
 }
 
@@ -84,13 +85,14 @@ func (p *Preamble) WritePreamble(w io.Writer) {
 const BLOCK_SIZE int64 = 4096
 
 const (
-	RECORD_TYPE_HEADER      RecordType = 0
+	RECORD_TYPE_START       RecordType = 0
 	RECORD_TYPE_FILE        RecordType = 1
 	RECORD_TYPE_HARDLINK    RecordType = 2
 	RECORD_TYPE_SYMLINK     RecordType = 3
 	RECORD_TYPE_DIRECTORY   RecordType = 4
 	RECORD_TYPE_ZDICTIONARY RecordType = 5
-	RECORD_TYPE_OS_SPECIAL  RecordType = 0x7F
+	RECORD_TYPE_OS_SPECIAL  RecordType = 126
+	RECORD_TYPE_CONTINUE    RecordType = 127
 )
 
 const (

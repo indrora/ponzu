@@ -22,6 +22,7 @@ parc create myarchive.pzarc a/* b/*`,
 		fmt.Println("create called")
 
 	},
+	Example: "parc create myarchive.pzarc a/*",
 }
 
 func init() {

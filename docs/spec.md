@@ -303,7 +303,8 @@ of this specification.
 
 All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
 
-The value of the checksum is the CBOR data plus any body portion.
+A record header's checksum is derived from the complete 4K header with the preamble's checksum field zeroed out.
+
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
 Unknown checksums are not invalid -- they are simply considered unverified. 
 
