@@ -76,8 +76,8 @@ Each Ponzu record is headed by a Preamble containing:
 * The characters 'PONZU\0'. 
 * A one byte record type (uint8_t)
 * A two-byte (uint16_t) flag field. 
-* A uint64_t defining the length of the data segment to follow
-* A uint16_t defining the number of bytes used in the final data segment
+* A uint64_t defining the number of data segments (4K blocks) to follow
+* A uint16_t defining the number of bytes used in the final data block
 * A 64-byte (512 bits) BLAKE2b-512 checksum of the relevant scope (see [Checksums](#checksums))
 
 A C implementation of the standard might use something like this:
@@ -303,7 +303,9 @@ of this specification.
 
 All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
 
-A record header's checksum is derived from the complete 4K header with the preamble's checksum field zeroed out.
+A record's checksum is BLAKE2B-512( preamble + CBOR + padding + body ).
+Any padding to align the end of the record to the next 4K block is ignored.
+When calculating the checksum, the preamble is zeroed out.
 
 If a checksum is all zero, it's considered "unknown" or "uncalculated".
 Unknown checksums are not invalid -- they are simply considered unverified. 

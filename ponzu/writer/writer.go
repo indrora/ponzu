@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"bytes"
 	"io"
 	"io/fs"
 
@@ -42,38 +43,7 @@ func (archive *ArchiveWriter) AppendSOA(prefix string, comment string) error {
 		Comment: comment,
 	}
 
-	cborHeader, err := cbor.Marshal(archiveHeader)
-	if err != nil {
-		return errors.Wrap(err, "Failed to marshal header")
-	}
-
-	return archive.appendShort(format.RECORD_TYPE_START, format.RECORD_FLAG_NONE, cborHeader)
-}
-
-func (archive *ArchiveWriter) appendShort(rtype format.RecordType, flags format.RecordFlags, body []byte) error {
-
-	// Align everything
-	archive.blockio.Align()
-	// Get the preamble bytes
-
-	preamble := format.NewPreamble(rtype, flags, 0)
-
-	if int64(len(body)) > format.BLOCK_SIZE-int64(len(preamble.ToBytes())) {
-		return errors.New("too much CBOR data")
-	}
-
-	preamble.Checksum = blake2b.Sum512(body)
-
-	_, err := archive.blockio.Write(preamble.ToBytes())
-	if err != nil {
-		return errors.Wrap(err, "failed writing preamble")
-	}
-	_, err = archive.blockio.Write(body)
-	if err != nil {
-		return errors.Wrap(err, "failed writing CBOR data")
-	}
-
-	return nil
+	return archive.AppendBytes(format.RECORD_TYPE_START, format.RECORD_FLAG_NONE, archiveHeader, nil)
 }
 
 func (archive *ArchiveWriter) AppendBytes(
@@ -83,7 +53,13 @@ func (archive *ArchiveWriter) AppendBytes(
 	data []byte) error {
 
 	// Build preamble
-	preamble := format.NewPreamble(rtype, flags, uint64(len(data)))
+
+	dlen := uint64(0)
+	if data != nil {
+		dlen = uint64(len(data))
+	}
+
+	preamble := format.NewPreamble(rtype, flags, dlen)
 
 	hash, err := blake2b.New512(nil)
 	if err != nil {
@@ -94,41 +70,53 @@ func (archive *ArchiveWriter) AppendBytes(
 	// CBOR encode the metadata
 	cborData, err := cbor.Marshal(meta)
 
+	if err != nil {
+		return errors.Wrap(err, "Failed to marshal metadata to CBOR.")
+	}
+
 	// pad the CBOR data out to 4K
 
-	headerblob := make([]byte, format.BLOCK_SIZE)
+	headerbuf := new(bytes.Buffer)
 
-	preambleBytes := preamble.ToBytes()
+	preamble.WritePreamble(headerbuf)
+	headerbuf.Write(cborData)
+	// now, pad it out
 
-	copy(headerblob, preambleBytes)
-	copy(headerblob[len(preambleBytes):], cborData)
+	// This is dumb, but it works
+	for {
+		if headerbuf.Len() < int(format.BLOCK_SIZE) {
+			headerbuf.WriteByte(0)
+		} else {
+			break
+		}
+	}
 
-	hash.Write(headerblob)
-	hash.Write(data)
-	checksum := hash.Sum(nil)
-
+	// Hash the thing
+	recordbytes := headerbuf.Bytes()
+	_, err = hash.Write(recordbytes)
 	if err != nil {
-		return errors.Wrap(err, "Failed to marshal header data")
+		return errors.Wrap(err, "Failed to hash header content")
+	}
+	if data != nil {
+		_, err = hash.Write(data)
+		if err != nil {
+			return errors.Wrap(err, "failed to hash body content")
+		}
 	}
 
-	if copy(preamble.Checksum[:], checksum) != 64 {
-		return errors.New("Couldn't copy checksum into preamble")
+	copy(preamble.Checksum[0:], hash.Sum(nil))
+	copy(recordbytes[0:], preamble.ToBytes())
+
+	if _, err = archive.blockio.Write(recordbytes); err != nil {
+		return errors.Wrap(err, "failed to write to underlying stream")
 	}
 
-	copy(headerblob, preambleBytes)
+	if data != nil {
 
-	if err = archive.blockio.Align(); err != nil {
-		return errors.Wrap(err, "Failed to align to next block.")
+		if _, err = archive.blockio.WriteWhole(data); err != nil {
+			return errors.Wrap(err, "failed to write to underlying stream")
+		}
 	}
-
-	if _, err = archive.blockio.Write(headerblob); err != nil {
-		return errors.Wrap(err, "Failed to write header data.")
-	}
-
-	if _, err = archive.blockio.WriteWhole(data); err != nil {
-		return errors.Wrap(err, "Failed to write body data")
-	}
-
 	return nil
 }
 

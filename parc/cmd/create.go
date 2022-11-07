@@ -27,7 +27,6 @@ parc create myarchive.pzarc a/* b/*`,
 
 func init() {
 	rootCmd.AddCommand(createCmd)
-	createCmd.Flags().BoolP("stream", "s", false, "Create a streamed archive (no header checksum)")
-	createCmd.Flags().BoolP("no-checksum", "n", false, "Skip checksum calculation")
 	createCmd.Flags().String("comment", "", "Add comment to archive")
+	createCmd.Flags().String("prefix", "", "Archive prefix")
 }

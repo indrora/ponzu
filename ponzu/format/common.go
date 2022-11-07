@@ -1,8 +1,11 @@
 package format
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 type PTimestamp uint64
@@ -43,8 +46,20 @@ func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
 
 	bcount := uint64(0)
 	modulo := uint16(0)
-	if length < uint64(BLOCK_SIZE) {
+
+	if length == 0 {
 		bcount = 0
+		modulo = 0
+	} else if flags&RECORD_FLAG_HALF == RECORD_FLAG_HALF {
+		// check that length < 1/2 BLOCK_SIZE
+		if length > uint64(BLOCK_SIZE)/2 {
+			flags ^= RECORD_FLAG_HALF
+		}
+		bcount = 0
+		modulo = uint16(length)
+
+	} else if length > 1 && length < uint64(BLOCK_SIZE) {
+		bcount = 1 // always a minimum of 1
 		modulo = uint16(length)
 	} else {
 		bcount = 1 + (length / uint64(BLOCK_SIZE))
@@ -64,22 +79,35 @@ func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
 
 func (p *Preamble) ToBytes() []byte {
 
-	bbuf := make([]byte, 0)
-	bbuf = append(bbuf, PREAMBLE_BYTES...)
-	bbuf = append(bbuf, byte(p.Rtype), byte(p.Flags))
-	bbuf = binary.BigEndian.AppendUint64(bbuf, p.DataLen)
-	bbuf = binary.BigEndian.AppendUint16(bbuf, p.Modulo)
-	bbuf = append(bbuf, p.Checksum[:]...)
-	return bbuf
+	b := new(bytes.Buffer)
+
+	p.WritePreamble(b)
+
+	return b.Bytes()
 
 }
 
-func (p *Preamble) WritePreamble(w io.Writer) {
+func (p *Preamble) WritePreamble(w io.Writer) error {
 
-	binary.Write(w, binary.BigEndian, p.Magic)
-	binary.Write(w, binary.BigEndian, p.Rtype)
-	binary.Write(w, binary.BigEndian, p.Flags)
-	binary.Write(w, binary.BigEndian, p.Checksum)
+	if err := binary.Write(w, binary.BigEndian, p.Magic); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	if err := binary.Write(w, binary.BigEndian, p.Rtype); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	if err := binary.Write(w, binary.BigEndian, p.Flags); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	if err := binary.Write(w, binary.BigEndian, p.DataLen); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	if err := binary.Write(w, binary.BigEndian, p.Modulo); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	if err := binary.Write(w, binary.BigEndian, p.Checksum); err != nil {
+		return errors.Wrap(err, "failed to write preamble")
+	}
+	return nil
 }
 
 const BLOCK_SIZE int64 = 4096
@@ -99,7 +127,8 @@ const (
 	RECORD_FLAG_NONE      RecordFlags = 0b00
 	RECORD_FLAG_HALF      RecordFlags = 0b01
 	RECORD_FLAG_STREAMED  RecordFlags = 0b10
-	RECORD_FLAG_NO_CHKSUM RecordFlags = 0b10
+	RECORD_FLAG_CONTINUES RecordFlags = 0b10
+	RECORD_FLAG_STAMPED   RecordFlags = 0b100
 )
 
 type CompressionType uint8

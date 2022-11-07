@@ -43,6 +43,7 @@ type File struct {
 }
 
 type Link struct {
+	File
 	Target string `cbor:"-1, keyasint"`
 }
 

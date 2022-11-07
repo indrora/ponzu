@@ -2,6 +2,7 @@ package ioutil
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -37,5 +38,33 @@ func TestBlockWriterSimple(t *testing.T) {
 	}
 
 	t.Logf(spew.Sprint(buffer.Bytes()))
+
+}
+
+func TestMultiBlock(t *testing.T) {
+	buffer := new(bytes.Buffer)
+	writer := NewBlockWriter(buffer, 16)
+
+	// we're going to write some big buckets of data
+
+	some_data := make([]byte, 27)
+	rand.Read(some_data)
+
+	writer.Write(some_data)
+	t.Log(spew.Sprint(buffer.Bytes()))
+	// Check the internal bit
+	if writer.modulo != 27%16 {
+		t.Fail()
+	}
+	// we haven't aligned the write yet, so
+	if buffer.Len() != len(some_data) {
+		t.Fail()
+	}
+	// forward to the next block
+	writer.Align()
+	t.Log(spew.Sprint(buffer.Bytes()))
+	if buffer.Len() != 32 {
+		t.Fail()
+	}
 
 }
