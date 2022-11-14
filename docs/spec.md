@@ -129,6 +129,7 @@ The following flags are used:
 | ------- | ---------- | ------------------ | --------------------------------------------------------------------------------- |
 | `0b1`   | 1          | `HALF_RECORD`      | The second half of the 4KiB block is the data portion                             |
 | `0b10`  | 1          | `STREAMED_ARCHIVE` | (for an SOA record) This archive was streamed on the fly                          |
+| `0b10`  | 1          | `CONTINUES`        | (For any record) This record has continuation blocks that follow it.              |
 | `0b100` | 1          | `STAMPED`          | This record has been postfacto checksummed                                        |
 
 Flags outside the mask of `0x00FF` are resered for implementation specific flags.

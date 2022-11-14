@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"io/fs"
+	"os"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
@@ -123,26 +124,66 @@ func (archive *ArchiveWriter) AppendBytes(
 func (archive *ArchiveWriter) AppendStream(path string, info fs.FileInfo, stream io.Reader) error {
 	// write the file to the end of the archive.
 
-	if info.Size() < int64(archive.MaxReadBuffer) {
-		// We can read the whole thing into memory, get the whole file hash, etc.
-	}
-
 	return nil
 }
 
 func (archive *ArchiveWriter) AppendFile(path string, source string, compression format.CompressionType) error {
+
+	return nil
+}
+
+func (archive *ArchiveWriter) appendUncompressed(path string, source string) error {
+
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	handle, err := os.Open(path)
+	defer handle.Close()
+	err = archive.AppendStream(path, info, handle)
+	return nil
+}
+
+func (archive *ArchiveWriter) appendCompressed(path string, source string, compression format.CompressionType) error {
+
 	return nil
 }
 
 func (archive *ArchiveWriter) AppendDirectory(path string, info fs.FileInfo) error {
-	return nil
+
+	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Directory{
+		File: format.File{Name: path,
+			Mode:       uint16(info.Mode()),
+			ModTime:    info.ModTime(),
+			Compressor: format.COMPRESSION_NONE,
+			Metadata:   map[string]any{},
+			Owner:      "",
+			Group:      "",
+		},
+	}, nil)
+
+	return err
 }
 
 func (archive *ArchiveWriter) AppendSymlink(path string, destination string, info fs.FileInfo) error {
-	return nil
+	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Symlink{
+		Link: format.Link{
+			File: format.File{Name: path,
+				Mode:       uint16(info.Mode()),
+				ModTime:    info.ModTime(),
+				Compressor: format.COMPRESSION_NONE,
+				Metadata:   map[string]any{},
+				Owner:      "",
+				Group:      "",
+			},
+			Target: destination,
+		},
+	}, nil)
+
+	return err
+
 }
 
 func (archive *ArchiveWriter) Close() error {
 	return archive.blockio.Close()
-
 }
