@@ -50,7 +50,7 @@ func (archive *ArchiveWriter) AppendSOA(prefix string, comment string) error {
 func (archive *ArchiveWriter) AppendBytes(
 	rtype format.RecordType,
 	flags format.RecordFlags,
-	meta any,
+	recordInfo any,
 	data []byte) error {
 
 	// Build preamble
@@ -69,7 +69,7 @@ func (archive *ArchiveWriter) AppendBytes(
 	}
 
 	// CBOR encode the metadata
-	cborData, err := cbor.Marshal(meta)
+	cborData, err := cbor.Marshal(recordInfo)
 
 	if err != nil {
 		return errors.Wrap(err, "Failed to marshal metadata to CBOR.")
@@ -121,8 +121,39 @@ func (archive *ArchiveWriter) AppendBytes(
 	return nil
 }
 
-func (archive *ArchiveWriter) AppendStream(path string, info fs.FileInfo, stream io.Reader) error {
-	// write the file to the end of the archive.
+func (archive *ArchiveWriter) AppendStream(stream io.Reader, recordType format.RecordType, flags format.RecordFlags, info any) error {
+	readbuff := new(bytes.Buffer)
+	readGoal := archive.MaxReadBuffer / 2
+
+	got, err := io.CopyN(readbuff, stream, int64(readGoal))
+	if err != nil {
+		return err
+	}
+	if got <= int64(readGoal) {
+		return archive.AppendBytes(
+			recordType, flags,
+			info,
+			readbuff.Bytes(),
+		)
+	} else {
+		// See if we still have some amount of data left
+		got, err = io.CopyN(readbuff, stream, int64(readGoal))
+		if got < int64(readGoal) {
+			return archive.AppendBytes(
+				recordType, flags,
+				info,
+				readbuff.Bytes(),
+			)
+		} else {
+			// Something else is left and we'll fill this function out later.
+		}
+	}
+
+	return nil
+
+}
+
+func (archive *ArchiveWriter) AppendFileStream(stream io.Reader, fileInfo format.File) error {
 
 	return nil
 }
@@ -139,8 +170,15 @@ func (archive *ArchiveWriter) appendUncompressed(path string, source string) err
 		return err
 	}
 	handle, err := os.Open(path)
+	if err != nil {
+		return err
+	}
 	defer handle.Close()
-	err = archive.AppendStream(path, info, handle)
+	err = archive.AppendStream(handle, format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, format.File{
+		Compressor: format.COMPRESSION_NONE,
+		Name:       path,
+		ModTime:    info.ModTime(),
+	})
 	return nil
 }
 
@@ -153,12 +191,9 @@ func (archive *ArchiveWriter) AppendDirectory(path string, info fs.FileInfo) err
 
 	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Directory{
 		File: format.File{Name: path,
-			Mode:       uint16(info.Mode()),
 			ModTime:    info.ModTime(),
 			Compressor: format.COMPRESSION_NONE,
 			Metadata:   map[string]any{},
-			Owner:      "",
-			Group:      "",
 		},
 	}, nil)
 
@@ -169,12 +204,9 @@ func (archive *ArchiveWriter) AppendSymlink(path string, destination string, inf
 	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Symlink{
 		Link: format.Link{
 			File: format.File{Name: path,
-				Mode:       uint16(info.Mode()),
 				ModTime:    info.ModTime(),
 				Compressor: format.COMPRESSION_NONE,
 				Metadata:   map[string]any{},
-				Owner:      "",
-				Group:      "",
 			},
 			Target: destination,
 		},

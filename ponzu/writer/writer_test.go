@@ -62,9 +62,6 @@ func TestWriterEncode(t *testing.T) {
 	rand.Read(randData)
 	fileinfo := format.File{
 		Name:       "foo",
-		Mode:       0666,
-		Owner:      "billy",
-		Group:      "billy",
 		Compressor: format.COMPRESSION_NONE,
 		ModTime:    time.Now(),
 	}
