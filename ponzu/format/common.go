@@ -146,4 +146,5 @@ const (
 	HOST_OS_SELINUX string = "selinux"
 	HOST_OS_NT      string = "winnt"
 	HOST_OS_DARWIN  string = "darwin"
+	HOST_OS_POSIX   string = "posix"
 )
