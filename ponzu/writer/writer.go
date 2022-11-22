@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"io/fs"
@@ -123,19 +124,22 @@ func (archive *ArchiveWriter) AppendBytes(
 
 func (archive *ArchiveWriter) AppendStream(stream io.Reader, recordType format.RecordType, flags format.RecordFlags, info any) error {
 	readbuff := new(bytes.Buffer)
-	readGoal := archive.MaxReadBuffer / 2
 
-	got, err := io.CopyN(readbuff, stream, int64(readGoal))
+	reader := bufio.NewReaderSize(stream, int(archive.MaxReadBuffer))
+
+	got, err := io.CopyN(readbuff, reader, int64(archive.MaxReadBuffer))
+
 	if err != nil {
 		return err
 	}
-	if got <= int64(readGoal) {
+	if got <= int64(archive.MaxReadBuffer) {
 		return archive.AppendBytes(
 			recordType, flags,
 			info,
 			readbuff.Bytes(),
 		)
 	} else {
+
 		// See if we still have some amount of data left
 		got, err = io.CopyN(readbuff, stream, int64(readGoal))
 		if got < int64(readGoal) {
