@@ -1,10 +1,8 @@
 package writer
 
 import (
-	"bufio"
 	"bytes"
 	"io"
-	"io/fs"
 	"os"
 
 	"github.com/fxamacker/cbor/v2"
@@ -122,102 +120,45 @@ func (archive *ArchiveWriter) AppendBytes(
 	return nil
 }
 
-func (archive *ArchiveWriter) AppendStream(stream io.Reader, recordType format.RecordType, flags format.RecordFlags, info any) error {
-	readbuff := new(bytes.Buffer)
-
-	reader := bufio.NewReaderSize(stream, int(archive.MaxReadBuffer))
-
-	got, err := io.CopyN(readbuff, reader, int64(archive.MaxReadBuffer))
-
-	if err != nil {
-		return err
-	}
-	if got <= int64(archive.MaxReadBuffer) {
-		return archive.AppendBytes(
-			recordType, flags,
-			info,
-			readbuff.Bytes(),
-		)
-	} else {
-
-		// See if we still have some amount of data left
-		got, err = io.CopyN(readbuff, stream, int64(readGoal))
-		if got < int64(readGoal) {
-			return archive.AppendBytes(
-				recordType, flags,
-				info,
-				readbuff.Bytes(),
-			)
-		} else {
-			// Something else is left and we'll fill this function out later.
-		}
-	}
-
-	return nil
-
-}
-
-func (archive *ArchiveWriter) AppendFileStream(stream io.Reader, fileInfo format.File) error {
-
-	return nil
-}
-
 func (archive *ArchiveWriter) AppendFile(path string, source string, compression format.CompressionType) error {
 
-	return nil
-}
+	// Get the stat of it
+	stat, err := os.Stat(source)
 
-func (archive *ArchiveWriter) appendUncompressed(path string, source string) error {
-
-	info, err := os.Stat(source)
 	if err != nil {
 		return err
 	}
-	handle, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer handle.Close()
-	err = archive.AppendStream(handle, format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, format.File{
-		Compressor: format.COMPRESSION_NONE,
+
+	// Construct a file record for it
+
+	info := format.File{
 		Name:       path,
-		ModTime:    info.ModTime(),
-	})
+		ModTime:    stat.ModTime(),
+		Compressor: compression,
+	}
+
+	if stat.Size() < int64(archive.MaxReadBuffer) {
+		// Hot dang we can just read the whole thing in
+		data, err := os.ReadFile(source)
+		if err != nil {
+			return err
+		}
+		data, err = archive.getCompressedChunk(data, compression)
+		if err != nil {
+			return err
+		}
+		return archive.AppendBytes(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, info, data)
+	} else {
+		// Stream it
+		of, err := os.Open(source)
+		if err != nil {
+			return err
+		}
+		defer of.Close()
+		return archive.AppendFileStream(of, info)
+	}
+
 	return nil
-}
-
-func (archive *ArchiveWriter) appendCompressed(path string, source string, compression format.CompressionType) error {
-
-	return nil
-}
-
-func (archive *ArchiveWriter) AppendDirectory(path string, info fs.FileInfo) error {
-
-	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Directory{
-		File: format.File{Name: path,
-			ModTime:    info.ModTime(),
-			Compressor: format.COMPRESSION_NONE,
-			Metadata:   map[string]any{},
-		},
-	}, nil)
-
-	return err
-}
-
-func (archive *ArchiveWriter) AppendSymlink(path string, destination string, info fs.FileInfo) error {
-	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.Symlink{
-		Link: format.Link{
-			File: format.File{Name: path,
-				ModTime:    info.ModTime(),
-				Compressor: format.COMPRESSION_NONE,
-				Metadata:   map[string]any{},
-			},
-			Target: destination,
-		},
-	}, nil)
-
-	return err
-
 }
 
 func (archive *ArchiveWriter) Close() error {

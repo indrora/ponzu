@@ -8,6 +8,8 @@ require (
 	github.com/spf13/cobra v1.5.0
 )
 
+require github.com/google/brotli/go/cbrotli v0.0.0-20221117134955-3914999fcc1f // indirect
+
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/x448/float16 v0.8.4 // indirect
