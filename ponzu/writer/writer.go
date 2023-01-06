@@ -7,6 +7,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
+	"github.com/indrora/ponzu/ponzu/format/metadata"
 	pio "github.com/indrora/ponzu/ponzu/ioutil"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
@@ -135,9 +136,12 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 		Name:       path,
 		ModTime:    stat.ModTime(),
 		Compressor: compression,
+		Metadata: metadata.CommonMetadata{
+			FileSize: stat.Size(),
+		},
 	}
 
-	if stat.Size() < int64(archive.MaxReadBuffer) {
+	if stat.Size() <= int64(archive.MaxReadBuffer) {
 		// Hot dang we can just read the whole thing in
 		data, err := os.ReadFile(source)
 		if err != nil {
@@ -149,13 +153,12 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 		}
 		return archive.AppendBytes(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, info, data)
 	} else {
-		// Stream it
-		of, err := os.Open(source)
-		if err != nil {
-			return err
-		}
-		defer of.Close()
-		return archive.AppendFileStream(of, info)
+
+		// Read in the first part and set up the internal loop.
+		buff := new(bytes.Buffer)
+
+		err = errors.Unwrap(nil)
+
 	}
 
 	return nil

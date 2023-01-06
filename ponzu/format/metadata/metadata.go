@@ -4,6 +4,10 @@ import (
 	"time"
 )
 
+func MakePointer[T any](x T) *T {
+	return &x
+}
+
 // The common metadata that is used by all forms
 // By all technical means, there is no "required" metadata.
 type CommonMetadata struct {

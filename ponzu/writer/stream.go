@@ -3,6 +3,7 @@ package writer
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 
 	"github.com/indrora/ponzu/ponzu/format"
@@ -15,30 +16,19 @@ func (archive *ArchiveWriter) AppendStream(stream io.Reader, recordType format.R
 
 	reader := bufio.NewReaderSize(stream, int(archive.MaxReadBuffer))
 
-	got, err := io.CopyN(readbuff, reader, int64(archive.MaxReadBuffer))
+	readErr := errors.Unwrap(nil)
 
-	if err != nil {
-		return err
-	}
-	if got <= int64(archive.MaxReadBuffer) {
-		return archive.AppendBytes(
-			recordType, flags,
-			info,
-			readbuff.Bytes(),
-		)
-	} else {
+	for readErr == nil {
+		got, readErr := io.CopyN(readbuff, reader, int64(archive.MaxReadBuffer))
 
-		// See if we still have some amount of data left
-		got, err = io.CopyN(readbuff, stream, int64(readGoal))
-		if got < int64(readGoal) {
-			return archive.AppendBytes(
-				recordType, flags,
-				info,
-				readbuff.Bytes(),
-			)
-		} else {
-			// Something else is left and we'll fill this function out later.
+		if readErr == io.EOF {
+			// There are no more bytes to read.
 		}
+
+		if got == 0 {
+			// We read zero bytes.
+		}
+
 	}
 
 	return nil

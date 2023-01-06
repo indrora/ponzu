@@ -36,7 +36,7 @@ type File struct {
 	Name       string          `cbor:"0, keyasint"`
 	Compressor CompressionType `cbor:"1, keyasint"`
 	ModTime    time.Time       `cbor:"2, keyasint"`
-	Metadata   map[string]any  `cbor:"3, keyasint"`
+	Metadata   any             `cbor:"3, keyasint"`
 }
 
 type Link struct {

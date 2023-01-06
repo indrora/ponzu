@@ -2,38 +2,43 @@ package writer
 
 import (
 	"bytes"
+	"io"
 
-	"github.com/google/brotli/go/cbrotli"
+	"github.com/andybalholm/brotli"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pkg/errors"
 )
 
 func (archive *ArchiveWriter) getCompressedChunk(data []byte, compressor format.CompressionType) ([]byte, error) {
+
+	buf := new(bytes.Buffer)
+
+	writer, err := archive.GetCompressor(buf, compressor)
+
+	if err != nil {
+		return nil, err
+	}
+	_, err = writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+
+}
+
+func (archive *ArchiveWriter) GetCompressor(writer io.Writer, compressor format.CompressionType) (io.Writer, error) {
+
 	switch compressor {
 	case format.COMPRESSION_NONE:
-		return data, nil
+		return writer, nil
 	case format.COMPRESSION_BROTLI:
-		return cbrotli.Encode(data, cbrotli.WriterOptions{})
+		return brotli.NewWriter(writer), nil
 	case format.COMPRESSION_ZSTD:
-		// slightly harder to handle. There's one little hiccup:
-		// if the archive has a current zstd dictionary, we should use that
-		// but for now, we're not going to care.
-
-		buf := new(bytes.Buffer)
-		writer, err := zstd.NewWriter(buf)
-		if err != nil {
-			return nil, err
-		}
-		_, err = writer.Write(data)
-		if err != nil {
-			return nil, err
-		}
-
-		writer.Flush()
-		writer.Close()
-		return buf.Bytes(), nil
+		return zstd.NewWriter(writer)
 	default:
-		return nil, errors.New("Unknown compression format.")
+		return nil, errors.New("Unknown compressor")
 	}
+
 }
