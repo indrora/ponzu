@@ -8,6 +8,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/format/metadata"
+	"github.com/indrora/ponzu/ponzu/ioutil"
 	pio "github.com/indrora/ponzu/ponzu/ioutil"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
@@ -44,7 +45,7 @@ func (archive *ArchiveWriter) AppendSOA(prefix string, comment string) error {
 		Comment: comment,
 	}
 
-	return archive.AppendBytes(format.RECORD_TYPE_START, format.RECORD_FLAG_NONE, archiveHeader, nil)
+	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_START, archiveHeader, nil)
 }
 
 func (archive *ArchiveWriter) AppendBytes(
@@ -132,12 +133,14 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 
 	// Construct a file record for it
 
+	szui := (uint64)(stat.Size())
+
 	info := format.File{
 		Name:       path,
 		ModTime:    stat.ModTime(),
 		Compressor: compression,
 		Metadata: metadata.CommonMetadata{
-			FileSize: stat.Size(),
+			FileSize: &szui,
 		},
 	}
 
@@ -154,10 +157,26 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 		return archive.AppendBytes(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, info, data)
 	} else {
 
-		// Read in the first part and set up the internal loop.
-		buff := new(bytes.Buffer)
+		// We're going to read chunks
 
-		err = errors.Unwrap(nil)
+		handle, err := os.OpenFile(source, os.O_RDONLY, os.ModeExclusive)
+		if err != nil {
+			return err
+		}
+		defer handle.Close()
+
+		chunkReader := ioutil.NewBlockReader(handle, int64(archive.MaxReadBuffer)/2)
+		chunk, chunkErr := chunkReader.ReadBlock()
+
+		if chunk == nil && chunkErr != io.EOF {
+			// Somehow, we hit the end of the file
+		} else if chunkErr == io.EOF {
+			// We've hit the end of the file.
+
+		} else {
+			// dump dump dump
+		}
+		_, err = compression_func.Write(chunk)
 
 	}
 
@@ -165,5 +184,9 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 }
 
 func (archive *ArchiveWriter) Close() error {
+	err := archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_END, nil, nil)
+	if err != nil {
+		return err
+	}
 	return archive.blockio.Close()
 }

@@ -113,7 +113,7 @@ func (p *Preamble) WritePreamble(w io.Writer) error {
 const BLOCK_SIZE int64 = 4096
 
 const (
-	RECORD_TYPE_START       RecordType = 0
+	RECORD_TYPE_CONTROL     RecordType = 0
 	RECORD_TYPE_FILE        RecordType = 1
 	RECORD_TYPE_HARDLINK    RecordType = 2
 	RECORD_TYPE_SYMLINK     RecordType = 3
@@ -124,11 +124,10 @@ const (
 )
 
 const (
-	RECORD_FLAG_NONE      RecordFlags = 0b00
-	RECORD_FLAG_HALF      RecordFlags = 0b01
-	RECORD_FLAG_STREAMED  RecordFlags = 0b10
-	RECORD_FLAG_CONTINUES RecordFlags = 0b10
-	RECORD_FLAG_STAMPED   RecordFlags = 0b100
+	RECORD_FLAG_NONE          RecordFlags = 0b00
+	RECORD_FLAG_CONTROL_START RecordFlags = 0b1
+	RECORD_FLAG_CONTROL_END   RecordFlags = 0b10
+	RECORD_FLAG_CONTINUES     RecordFlags = 0b10
 )
 
 type CompressionType uint8
