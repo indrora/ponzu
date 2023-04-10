@@ -49,7 +49,6 @@ Where tar chose fixed size records of 512 bytes (the standard tape record length
 - Modern HDDs are aligned on 4k sectors (the "4Kn" SATA standard, ca. 2010)
 - Many modern processors use 4k pages in memory
 
-4K as a block size also allows for many very useful hacks, such as short/half blocks (1,2K) and being able to hold the whole file in a single record, metadata included.
 
 Additionally, compression should be considered free in today's age.  
 Modern compression algorithms (ZStandard and Brotli, in Ponzu's case) are reaching their theoretical maximums for certain forms of data. As such, there's no decompression tradeoff for allowing compressed segments, only a cost during compression.  
@@ -65,11 +64,7 @@ By taking into consideration the source and host operating system, more informat
 
 # The Ponzu archive format, summary
 
-Ponzu archives are comprised of _records_. Records come in two sizes:
-
-- Full Size (4KiByte) -- The typical block size.
-- Half Size (2KiByte) -- For files smaller than 1...2 KiB. These actually take up  
-  the full block, but their content is the second 2KiB of the record.
+Ponzu archives are comprised of _records_ of 4KiB chunks.
 
 Each Ponzu record is headed by a Preamble containing:
 
@@ -94,8 +89,8 @@ struct RECORD_PREAMBLE {
 ```
 
 The rest of the record is an [RFC 8949 Concise Binary Object Representation (CBOR)](https://www.rfc-editor.org/rfc/rfc8949) encoded body.  
-If the `HALF_RECORD` flag is used, the CBOR content extends only into the first 2048 bytes.  
-The CBOR content must not extend to greater than the 4KiB allotment. It is up to the  
+
+ CBOR content must not extend to greater than the 4KiB allotment. It is up to the  
 implementation what information to exclude from the record to condense the information  
 to 4KiB.
 
@@ -126,10 +121,12 @@ The following flags are used:
 
 | Value   | Introduced | Name               | Name                                                                 |
 | ------- | ---------- | ------------------ | -------------------------------------------------------------------- |
-| `0b1`   | 1          | `HALF_RECORD`      | The second half of the 4KiB block is the data portion                |
-| `0b10`  | 1          | `STREAMED_ARCHIVE` | (for an SOA record) This archive was streamed on the fly             |
-| `0b10`  | 1          | `CONTINUES`        | (For any record) This record has continuation blocks that follow it. |
-| `0b100` | 1          | `STAMPED`          | This record has been postfacto checksummed                           |
+| `0b01`  | 1          | `CONTROL_START`    | (for a control record) This is the start of an archive.              |
+| `0b10`  | 1          | `CONTROL_END`      | (For a control record) This is the end of an archive.                |
+| `0b100` | 1          | `CONTROL_STREAMED` | (for a control record) This archive may not contain checksums.       |
+| `0b1`   | 1          | `CONTINUES`        | (For any record) This record has continuation blocks that follow it. |
+
+
 
 Flags outside the mask of `0x00FF` are resered for implementation specific flags.
 
@@ -141,7 +138,7 @@ The defined record types are
 
 | Value | Introduced | Name                 | Description                                                     | Length    |
 | ----- | ---------- | -------------------- | --------------------------------------------------------------- | --------- |
-| 0     | 1          | SOA                  | Start of Archive: indicates new archive context parameters.     | 0         |
+| 0     | 1          | Control              | Start, end, or other "special" actions for the archive          | 0         |
 | 1     | 1          | File                 | A regular file.                                                 | Varies    |
 | 2     | 1          | Symlink              | A symbolic link to a path                                       | 0         |
 | 3     | 1          | Hardlink             | A hard link to a specific inode                                 | 0         |
@@ -153,7 +150,13 @@ The defined record types are
 
 Here, length is specified as the number of data blocks after the record header.
 
-### Start Of Archive (0)
+### Archive Control (0)
+
+An archive control record is defined by its flags:
+
+* `CONTROL_START`: This is a start of archive record.
+* `CONTROL_END`: This is the end of the archive
+
 
 The Start of Archive record is used to define the paramters of an archive.
 
@@ -167,6 +170,7 @@ The Start of Archive record is used to define the paramters of an archive.
 > Note: The prefix MUST NOT begin with a leading `/` and any compliant implementation MUST discard a leading slash  
 > unless the implementation gives a mechanism to "trust" the archive.
 
+The End of Archive record 
 ### File
 
 | Name            | Key | Since | type      | Description               |
@@ -268,7 +272,7 @@ because it is a TCP socket, TTY, etc).
 
 Streamed archives may be comprised of precomputed file records, in which the precomputed checksum is known.  
 In these cases, an individual file record may have a checksum, but a checksum of all 0 should be accepted.  
-A streamed archive may be verified post-facto and have its checksums "stamped" upon it.
+
 
 ## Character encoding
 
@@ -310,7 +314,6 @@ Unknown checksums are not invalid -- they are simply considered unverified.
 A compliant implementation SHOULD verify the contents of all data segments, even if their type is not known.  
 A compliant implementation MUST verify the contents of all data segments of which their type is known.
 
-A compliant implementation SHOULD set the STAMPED flag on any records which have had their checksum updated from a zero state.  
 A compliant implementation MUST NOT alter the checksum of an already checksummed segment.
 
 # Appendix: Structures for Metadata maps
