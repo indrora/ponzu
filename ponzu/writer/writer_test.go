@@ -2,13 +2,14 @@ package writer
 
 import (
 	"bytes"
-	"encoding/binary"
+	"io"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
+	"github.com/indrora/ponzu/ponzu/ioutil"
 )
 
 func TestWriter(t *testing.T) {
@@ -23,12 +24,12 @@ func TestWriter(t *testing.T) {
 		"hello": "world",
 	}
 
-	if writer.AppendSOA("test", "bueno") != nil {
+	if writer.AppendStart("test", "bueno") != nil {
 		t.Error("Failed to append SOA!")
 		t.Fail()
 	}
 
-	if writer.AppendBytes(254, 0, metadata, data) != nil {
+	if writer.AppendBytes(254, 0, format.COMPRESSION_NONE, metadata, data) != nil {
 		t.Error("Failed to append some bytes....")
 		t.Fail()
 	}
@@ -58,60 +59,74 @@ func TestWriterEncode(t *testing.T) {
 
 	// Generate some data
 
-	randData := make([]byte, int(1.50*float32(format.BLOCK_SIZE)))
+	randData := make([]byte, int(1.75*float32(format.BLOCK_SIZE)))
 	rand.Read(randData)
 	fileinfo := format.File{
-		Name:       "foo",
-		Compressor: format.COMPRESSION_NONE,
-		ModTime:    time.Now(),
+		Name:    "foo",
+		ModTime: time.Now(),
 	}
-	writer.AppendBytes(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, fileinfo, randData)
+
+	test_rType := uint8(rand.Intn(255))
+	test_rFlags := uint16(rand.Intn(255))
+
+	err := writer.AppendBytes(format.RecordType(test_rType), format.RecordFlags(test_rFlags), format.COMPRESSION_NONE, fileinfo, randData)
+
+	if err != nil {
+		t.Fatal(err, "Failed to write to the archive!")
+	}
+
 	writer.Close()
 
 	newbytes := buff.Bytes()
+
 	if int64(len(newbytes)) != 3*format.BLOCK_SIZE {
-		t.Errorf("Expected %d bytes, got %d", 3*format.BLOCK_SIZE, len(newbytes))
+		t.Fatalf("Wrong number of bytes written: Expected %v, got %v", 3*format.BLOCK_SIZE, len(newbytes))
 	}
 
-	// Check that the length and such are properly encoded
-	if newbytes[6] != byte(format.RECORD_TYPE_FILE) {
-		t.Errorf("Expected FILE, got %d", newbytes[6])
+	bufread := bytes.NewReader(newbytes)
+
+	blockread := ioutil.NewBlockReader(bufread, format.BLOCK_SIZE)
+
+	fileheader, _ := blockread.ReadBlock()
+	fileheaderReader := bytes.NewReader(fileheader)
+
+	testPreamble, err := format.ReadPreamble(fileheaderReader)
+	if err != nil {
+		t.Errorf("Failed to read preamble: %v", err)
 	}
 
-	if testFlags := binary.BigEndian.Uint16(newbytes[7:]); testFlags != 0 {
-		t.Errorf("Expected 0 flags, got %d", testFlags)
+	if testPreamble.Rtype != format.RecordType(test_rType) {
+		t.Errorf("Expected record type %v, got %v", test_rType, testPreamble.Rtype)
+	}
+	if testPreamble.Flags != format.RecordFlags(test_rFlags) {
+		t.Errorf("Expected record flag %v, got %v", test_rFlags, testPreamble.Rtype)
 	}
 
-	if testBcount := binary.BigEndian.Uint64(newbytes[9:]); testBcount != 2 {
-		t.Errorf("Expected 2 length, got %d", testBcount)
+	if testPreamble.DataLen != 2 {
+		t.Errorf("Expected 2 length, got %d", testPreamble.DataLen)
 	}
 
 	checkModulo := uint16(len(randData) % int(format.BLOCK_SIZE))
-	if testModulo := binary.BigEndian.Uint16(newbytes[17:]); testModulo != checkModulo {
-		t.Errorf("Expected modulous to be %d, got %d", checkModulo, testModulo)
+	if testPreamble.Modulo != checkModulo {
+		t.Errorf("Expected modulous to be %d, got %d", checkModulo, testPreamble.Modulo)
 	}
 
-	spew.Dump(newbytes[:70])
+	// did we also get data right?
 
-	// We should be able to trim off the first block and be able to read the same data we put in back, but padded out
-
-	if newbytes[4096] != randData[0] {
-		t.Error("First byte of data block is not correct data")
+	testData, err := blockread.ReadBlock()
+	if err == io.EOF {
+		t.Error(err, "Unexpected EOF")
 	}
-
-	t.Logf("data len = %d", len(randData))
-
-	for i, v := range newbytes[4096:] {
-		if i >= len(randData) {
-			if v != 0 {
-				t.Errorf("Wrong data in padding, expecting 0, got %d", v)
-			}
-		} else if randData[i] != v {
-			t.Errorf("Bad data at %v; expected %v, got %v", i, randData[i], v)
-		}
+	// now, we should be able to read the next block and get an EOF
+	testData2, err := blockread.ReadBlock()
+	if err != io.EOF {
+		remain, e := blockread.ReadBlock()
+		spew.Dump(testData)
+		t.Error(err, e, "expected EOF, got something else")
 	}
-}
-
-func TestChecksum(t *testing.T) {
+	testData = append(testData, testData2[:testPreamble.Modulo]...)
+	if !bytes.Equal(testData, randData) {
+		t.Error("failed to read the appropriate data size.")
+	}
 
 }

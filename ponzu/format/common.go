@@ -30,9 +30,11 @@ type RecordFlags uint16
 type Preamble struct {
 	// Magic value, must be PREAMBLE_STRING
 	Magic [6]byte
-	// Record type (0 = SOA, etc. )
+	// Record type
 	Rtype RecordType
-	// Record flags (Half, Streamed, etc.)
+	// Compression type of the body
+	Compression CompressionType
+	// Record flags
 	Flags RecordFlags
 	// Number of data-blocks that follow
 	DataLen uint64
@@ -42,7 +44,7 @@ type Preamble struct {
 	Checksum [64]byte
 }
 
-func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
+func NewPreamble(rType RecordType, compression CompressionType, flags RecordFlags, length uint64) Preamble {
 
 	bcount := uint64(0)
 	modulo := uint16(0)
@@ -50,14 +52,6 @@ func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
 	if length == 0 {
 		bcount = 0
 		modulo = 0
-	} else if flags&RECORD_FLAG_HALF == RECORD_FLAG_HALF {
-		// check that length < 1/2 BLOCK_SIZE
-		if length > uint64(BLOCK_SIZE)/2 {
-			flags ^= RECORD_FLAG_HALF
-		}
-		bcount = 0
-		modulo = uint16(length)
-
 	} else if length > 1 && length < uint64(BLOCK_SIZE) {
 		bcount = 1 // always a minimum of 1
 		modulo = uint16(length)
@@ -67,10 +61,11 @@ func NewPreamble(rType RecordType, flags RecordFlags, length uint64) Preamble {
 	}
 
 	return Preamble{
-		Magic:    [6]byte{'P', 'O', 'N', 'Z', 'U', 0},
-		Rtype:    rType,
-		Flags:    flags,
-		Checksum: [64]byte{0},
+		Magic:       [6]byte{'P', 'O', 'N', 'Z', 'U', 0},
+		Rtype:       rType,
+		Compression: compression,
+		Flags:       flags,
+		Checksum:    [64]byte{0},
 		// computed fields
 		DataLen: bcount,
 		Modulo:  modulo,
@@ -89,25 +84,21 @@ func (p *Preamble) ToBytes() []byte {
 
 func (p *Preamble) WritePreamble(w io.Writer) error {
 
-	if err := binary.Write(w, binary.BigEndian, p.Magic); err != nil {
-		return errors.Wrap(err, "failed to write preamble")
-	}
-	if err := binary.Write(w, binary.BigEndian, p.Rtype); err != nil {
-		return errors.Wrap(err, "failed to write preamble")
-	}
-	if err := binary.Write(w, binary.BigEndian, p.Flags); err != nil {
-		return errors.Wrap(err, "failed to write preamble")
-	}
-	if err := binary.Write(w, binary.BigEndian, p.DataLen); err != nil {
-		return errors.Wrap(err, "failed to write preamble")
-	}
-	if err := binary.Write(w, binary.BigEndian, p.Modulo); err != nil {
-		return errors.Wrap(err, "failed to write preamble")
-	}
-	if err := binary.Write(w, binary.BigEndian, p.Checksum); err != nil {
+	if err := binary.Write(w, binary.BigEndian, *p); err != nil {
 		return errors.Wrap(err, "failed to write preamble")
 	}
 	return nil
+}
+
+func ReadPreamble(r io.Reader) (*Preamble, error) {
+	nPreamble := &Preamble{}
+	err := binary.Read(r, binary.BigEndian, nPreamble)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read preamble")
+	} else {
+		return nPreamble, nil
+	}
+
 }
 
 const BLOCK_SIZE int64 = 4096

@@ -3,11 +3,9 @@ package writer
 import (
 	"bytes"
 	"io"
-	"os"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
-	"github.com/indrora/ponzu/ponzu/format/metadata"
 	"github.com/indrora/ponzu/ponzu/ioutil"
 	pio "github.com/indrora/ponzu/ponzu/ioutil"
 	"github.com/pkg/errors"
@@ -26,15 +24,17 @@ type ArchiveWriter struct {
 }
 
 func NewWriter(file io.Writer, readBufferSize uint64) *ArchiveWriter {
+
 	return &ArchiveWriter{
 		fileio:        file,
 		blockio:       *pio.NewBlockWriter(file, format.BLOCK_SIZE),
 		cHeader:       nil,
 		MaxReadBuffer: readBufferSize,
 	}
+
 }
 
-func (archive *ArchiveWriter) AppendSOA(prefix string, comment string) error {
+func (archive *ArchiveWriter) AppendStart(prefix string, comment string) error {
 	// write the initial header to the file.
 
 	// This is the CBOR portion.
@@ -45,12 +45,19 @@ func (archive *ArchiveWriter) AppendSOA(prefix string, comment string) error {
 		Comment: comment,
 	}
 
-	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_START, archiveHeader, nil)
+	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_START, format.COMPRESSION_NONE, archiveHeader, nil)
 }
 
+func (archive *ArchiveWriter) AppendEnd() error {
+	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_END, format.COMPRESSION_NONE, nil, nil)
+}
+
+// AppendBytes adds a raw, uncompressed block of data to the end of the archive.
+// This includes the header and relevant body (`recordInfo`)
 func (archive *ArchiveWriter) AppendBytes(
 	rtype format.RecordType,
 	flags format.RecordFlags,
+	compression format.CompressionType,
 	recordInfo any,
 	data []byte) error {
 
@@ -61,7 +68,7 @@ func (archive *ArchiveWriter) AppendBytes(
 		dlen = uint64(len(data))
 	}
 
-	preamble := format.NewPreamble(rtype, flags, dlen)
+	preamble := format.NewPreamble(rtype, compression, flags, dlen)
 
 	hash, err := blake2b.New512(nil)
 	if err != nil {
@@ -96,9 +103,11 @@ func (archive *ArchiveWriter) AppendBytes(
 	// Hash the thing
 	recordbytes := headerbuf.Bytes()
 	_, err = hash.Write(recordbytes)
+
 	if err != nil {
 		return errors.Wrap(err, "Failed to hash header content")
 	}
+
 	if data != nil {
 		_, err = hash.Write(data)
 		if err != nil {
@@ -115,78 +124,60 @@ func (archive *ArchiveWriter) AppendBytes(
 
 	if data != nil {
 
-		if _, err = archive.blockio.WriteWhole(data); err != nil {
+		newdata, err := archive.getCompressedChunk(data, compression)
+
+		if err != nil {
+			return errors.Wrap(err, "failed to compress data")
+		}
+
+		if _, err = archive.blockio.WriteWhole(newdata); err != nil {
 			return errors.Wrap(err, "failed to write to underlying stream")
 		}
 	}
 	return nil
 }
 
-func (archive *ArchiveWriter) AppendFile(path string, source string, compression format.CompressionType) error {
+func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format.RecordFlags, compression format.CompressionType, recordInfo any, stream io.Reader) error {
 
-	// Get the stat of it
-	stat, err := os.Stat(source)
+	chunkReader := ioutil.NewBlockReader(stream, int64(archive.MaxReadBuffer)/2)
 
-	if err != nil {
-		return err
-	}
+	// Read at least the first chunk
 
-	// Construct a file record for it
+	chunk, err := chunkReader.ReadBlock()
 
-	szui := (uint64)(stat.Size())
-
-	info := format.File{
-		Name:       path,
-		ModTime:    stat.ModTime(),
-		Compressor: compression,
-		Metadata: metadata.CommonMetadata{
-			FileSize: &szui,
-		},
-	}
-
-	if stat.Size() <= int64(archive.MaxReadBuffer) {
-		// Hot dang we can just read the whole thing in
-		data, err := os.ReadFile(source)
-		if err != nil {
-			return err
-		}
-		data, err = archive.getCompressedChunk(data, compression)
-		if err != nil {
-			return err
-		}
-		return archive.AppendBytes(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, info, data)
+	if err == io.EOF {
+		// There is only one block, we're cool
+		return archive.AppendBytes(rtype, flags, compression, recordInfo, chunk)
+	} else if err != nil {
+		return errors.Wrap(err, "failed to read block from underlying stream")
 	} else {
+		// Tick on the CONTINUES flag
 
-		// We're going to read chunks
-
-		handle, err := os.OpenFile(source, os.O_RDONLY, os.ModeExclusive)
-		if err != nil {
-			return err
-		}
-		defer handle.Close()
-
-		chunkReader := ioutil.NewBlockReader(handle, int64(archive.MaxReadBuffer)/2)
-		chunk, chunkErr := chunkReader.ReadBlock()
-
-		if chunk == nil && chunkErr != io.EOF {
-			// Somehow, we hit the end of the file
-		} else if chunkErr == io.EOF {
-			// We've hit the end of the file.
-
+		flags ^= format.RECORD_FLAG_CONTINUES
+		if err = archive.AppendBytes(rtype, flags, compression, recordInfo, chunk); err != nil {
+			return errors.Wrap(err, "Failed to write first chunk in continue chain")
 		} else {
-			// dump dump dump
+			for {
+
+				chunk, err = chunkReader.ReadBlock()
+				if err != nil && err != io.EOF {
+					return errors.Wrap(err, "failed to read block from underlying stream")
+				} else if err == io.EOF {
+					return archive.AppendBytes(format.RECORD_TYPE_CONTINUE, format.RECORD_FLAG_NONE, compression, nil, chunk)
+				} else {
+					err = archive.AppendBytes(format.RECORD_TYPE_CONTINUE, format.RECORD_FLAG_CONTINUES, compression, nil, chunk)
+					if err != nil {
+						return errors.Wrap(err, "failed to write continuation block.")
+					}
+				}
+
+			}
 		}
-		_, err = compression_func.Write(chunk)
 
 	}
 
-	return nil
 }
 
 func (archive *ArchiveWriter) Close() error {
-	err := archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_END, nil, nil)
-	if err != nil {
-		return err
-	}
 	return archive.blockio.Close()
 }

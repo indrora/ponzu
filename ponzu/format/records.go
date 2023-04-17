@@ -33,10 +33,9 @@ type StartOfArchive struct {
 
 type File struct {
 	RecordBase
-	Name       string          `cbor:"0, keyasint"`
-	Compressor CompressionType `cbor:"1, keyasint"`
-	ModTime    time.Time       `cbor:"2, keyasint"`
-	Metadata   any             `cbor:"3, keyasint"`
+	Name     string    `cbor:"0, keyasint"`
+	ModTime  time.Time `cbor:"1, keyasint"`
+	Metadata any       `cbor:"2, keyasint"`
 }
 
 type Link struct {
