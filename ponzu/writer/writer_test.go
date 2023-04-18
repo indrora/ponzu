@@ -2,6 +2,7 @@ package writer
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math/rand"
 	"testing"
@@ -119,9 +120,9 @@ func TestWriterEncode(t *testing.T) {
 	}
 	// now, we should be able to read the next block and get an EOF
 	testData2, err := blockread.ReadBlock()
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		remain, e := blockread.ReadBlock()
-		spew.Dump(testData)
+		spew.Dump(remain)
 		t.Error(err, e, "expected EOF, got something else")
 	}
 	testData = append(testData, testData2[:testPreamble.Modulo]...)

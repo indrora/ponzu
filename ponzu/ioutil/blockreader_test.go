@@ -76,8 +76,12 @@ func TestBlockReader_ReadBlock(t *testing.T) {
 				}
 
 				err = oerr
-				if errors.Is(err, io.EOF) {
-					break
+				if len(tc.expected) == len(blocks) {
+					if !errors.Is(err, tc.expectErr) {
+						t.Fatalf("unexpected error; want %v, got %v", tc.expectErr, err)
+					} else {
+						break
+					}
 				} else if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -87,6 +91,7 @@ func TestBlockReader_ReadBlock(t *testing.T) {
 			if len(tc.expected) != len(blocks) {
 				t.Fatalf("unexpected number of blocks: got %d, want %d", len(blocks), len(tc.expected))
 			}
+
 			for i, expectedBlock := range tc.expected {
 				check_block := blocks[i]
 				if !bytes.Equal(expectedBlock, check_block) {
@@ -94,11 +99,10 @@ func TestBlockReader_ReadBlock(t *testing.T) {
 				}
 			}
 
-			if tc.expectErr != nil && tc.expectErr != io.EOF {
-				if !errors.Is(err, tc.expectErr) {
-					t.Errorf("unexpected error: got %v, want %v", err, tc.expectErr)
-				}
+			if !errors.Is(err, tc.expectErr) {
+				t.Errorf("unexpected error: got %v, want %v", err, tc.expectErr)
 			}
+
 		})
 	}
 }

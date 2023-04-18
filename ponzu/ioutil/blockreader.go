@@ -1,21 +1,20 @@
 package ioutil
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 )
 
 type BlockReader struct {
-	reader    io.Reader
+	reader    *bufio.Reader
 	ChunkSize int64
-	buffer    *bytes.Buffer
 }
 
 func NewBlockReader(reader io.Reader, chunkSize int64) *BlockReader {
 	return &BlockReader{
-		reader:    reader,
+		reader:    bufio.NewReaderSize(reader, int(chunkSize)),
 		ChunkSize: chunkSize,
-		//buffer:    new(bytes.Buffer),
 	}
 }
 
@@ -31,6 +30,10 @@ func (br *BlockReader) ReadBlock() ([]byte, error) {
 	}
 	if n < br.ChunkSize {
 		return buffer.Bytes(), io.EOF
+	} else if _, err = br.reader.Peek(1); err == io.EOF {
+		return buffer.Bytes(), io.EOF
 	}
-	return buffer.Bytes(), nil
+
+	return buffer.Bytes(), err
+
 }
