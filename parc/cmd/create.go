@@ -19,7 +19,25 @@ example:
 
 parc create myarchive.pzarc a/* b/*`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("create called")
+		if len(args) < 2 {
+			fmt.Fprintln(cmd.ErrOrStderr(), "Expected 2 arguments, at least")
+		}
+
+		// we're going to just list the files out so far
+
+		archiveFname := args[0]
+		archivePaths := args[1:]
+
+		prefix := cmd.Flag("prefix")
+		comment := cmd.Flag("comment")
+
+		fmt.Printf("archive name = \"%v\", prefix = \"%v\", comment = \"%v\"\n", archiveFname, prefix.Value, comment.Value)
+		for _, pathn := range archivePaths {
+			// walk every file in those paths.
+
+			fmt.Println(pathn)
+
+		}
 
 	},
 	Example: "parc create myarchive.pzarc a/*",
