@@ -4,40 +4,38 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/ioutil"
+	"golang.org/x/crypto/blake2b"
 )
 
 // The reader is much simpler than the writer.
 
 type ReaderState int
 
-
-
 var (
 	ErrExpectedHeader    = errors.New("expected a header, got something else")
+	ErrUnexpectedData    = errors.New("unexpected data length for record type")
+	ErrExpectedContinue  = errors.New("expected continue, got other")
 	ErrUnexpectedControl = errors.New("unexpected control message")
 	ErrUnknownRecordType = errors.New("unknown record type")
-	ErrMalformedHash     = errors.New("hash does not match")
-	ErrState        = errors.New("tried reading body before you got a header")
+	ErrHashMismatch      = errors.New("hash does not match")
+	ErrState             = errors.New("tried reading body before you got a header")
 )
-
 
 const (
 	STATE_EMPTY ReaderState = 0
 	STATE_OK    ReaderState = 1
 	STATE_BODY  ReaderState = 2
-	
 )
-
 
 type Reader struct {
 	stream       *ioutil.BlockReader
 	lastPreamble *format.Preamble
-	state			ReaderState 
 }
 
 func NewReader(reader io.Reader) *Reader {
@@ -60,42 +58,58 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		}
 	}
 
-	block, err := reader.stream.ReadBlock()
+	var err error
 
-	if err != nil {
-		return nil, nil, err
-	}
-	hReader := bytes.NewReader(block)
 	mPreamble := &format.Preamble{}
 
-	if err = binary.Read(hReader, binary.BigEndian, mPreamble); err != nil {
-		return nil, nil, errors.Join(err, ExpectedHeader)
+	if err = binary.Read(reader.stream, binary.BigEndian, mPreamble); err != nil {
+		return nil, nil, errors.Join(err, ErrExpectedHeader)
 	}
 
+	// Parse from the preamble the metadata.
+	cborData := new(bytes.Buffer)
+	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.MetadataLength))
 
-	// do some quick checks on the preamble
+	if n != int64(mPreamble.MetadataLength) {
+		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of metadata", err, mPreamble.MetadataLength, n)
+	} else if err != nil {
+		return mPreamble, nil, err
+	}
 
-	switch(mPreamble.Rtype) {
-		
+	cborDataBytes := cborData.Bytes()
+	metaHashCheck := blake2b.Sum512(cborDataBytes)
+
+	if !bytes.Equal(metaHashCheck[:], mPreamble.MetadataChecksum[:]) {
+		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.MetadataChecksum, metaHashCheck)
+	}
+
+	decoder := cbor.NewDecoder(cborData)
+
+	var metadata interface{}
+
+	err = decoder.Decode(metadata)
+
+	if err != nil {
+		return mPreamble, nil, err
+	}
+
+	switch mPreamble.Rtype {
+
 	case format.RECORD_TYPE_CONTROL:
 	case format.RECORD_TYPE_DIRECTORY:
 	case format.RECORD_TYPE_HARDLINK:
 	case format.RECORD_TYPE_SYMLINK:
+	case format.RECORD_TYPE_OS_SPECIAL:
 		if mPreamble.DataLen != 0 {
-			return errors.Join(ExpectedHeader, errors.New("Invalid block "))
+			return mPreamble, metadata, fmt.Errorf("%w: expected 0, got %v", ErrUnexpectedData, mPreamble.DataLen)
 		}
-
 	default:
-		// noop
+
 	}
 
-	cborDecoder := cbor.NewDecoder(hReader)
+	// make sure that the reader is aligned right.
 
-	var metadata interface{}
-
-	if err = cborDecoder.Decode(&metadata); err != nil {
-		return nil, nil, errors.join(err, ExpectedHeader)
-	}
+	reader.stream.Realign()
 
 	reader.lastPreamble = mPreamble
 
@@ -111,21 +125,99 @@ func (reader *Reader) HasBody() bool {
 	}
 }
 
-func (reader *Reader) GetBody() ([]byte, error) {
+func (reader *Reader) GetBody(validate bool) ([]byte, error) {
 
-	if 
+	// if there is no body, we clean up the header and leave.
+
+	// decompress it into the appropriate buffer.
+	body := new(bytes.Buffer)
+
+	err := reader.CopyTo(body, validate)
+
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	err2 := reader.stream.Realign()
 
 	// noop for now
-	return nil, nil
+	return body.Bytes(), errors.Join(err, err2)
 }
 
 func (reader *Reader) CopyTo(writer io.Writer, validate bool) error {
-	// noop
-	return nil
+
+	// if there is no body, we clean up the header and leave.
+
+	var err error
+
+	if !reader.HasBody() {
+
+		reader.lastPreamble = nil
+		return io.EOF
+
+	}
+
+	// Otherwise, we're going to fill up our buffer.
+
+	bodyLen := ((reader.lastPreamble.DataLen - 1) * uint64(format.BLOCK_SIZE)) + uint64(reader.lastPreamble.Modulo)
+
+	// Get a limited reader
+	dataReader := io.LimitReader(reader.stream, int64(bodyLen))
+
+	// set up the tee: This allows us to compute the checksum in-situ, while the read is happening
+	// at no performance penalty.
+	hash, _ := blake2b.New512(nil)
+	// tee from the limited reader to the hash function glub glub
+	tee := io.TeeReader(dataReader, hash)
+	// Wrap it in our decompression function (in the simple case, this is null, otherwise this is a zstd/brotli decompressor)
+	dataReader, err = reader.getDecompressor(tee, reader.lastPreamble.Compression)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, dataReader)
+
+	if err != nil && err != io.EOF {
+		// something terrible has happened.
+		return err
+
+	}
+
+	checksum := hash.Sum(nil)
+
+	alignerr := reader.stream.Realign()
+	// if we've been asked to validate the checksum, do it now
+
+	if validate {
+		if !bytes.Equal(checksum, reader.lastPreamble.DataChecksum[:]) {
+			reader.lastPreamble = nil
+			return ErrHashMismatch
+		}
+	}
+
+	reader.lastPreamble = nil
+	return errors.Join(err, alignerr)
 }
 
 func (reader *Reader) CopyAll(writer io.Writer, validate bool) error {
-	// noop
+more:
+
+	err := reader.CopyTo(writer, validate)
+
+	if err != nil {
+		return err
+	}
+
+	if reader.lastPreamble.Flags&format.RECORD_FLAG_CONTINUES != 0 {
+		tPre, _, err := reader.Next()
+		if err != nil {
+			return err
+		} else if tPre.Rtype != format.RECORD_TYPE_CONTINUE || tPre.Flags&format.RECORD_FLAG_CONTINUES == 0 {
+			return ErrExpectedContinue
+		}
+		goto more
+	}
 
 	return nil
 }

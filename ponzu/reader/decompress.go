@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	UnknownCompressionError = errors.New("unknown compression")
+	errUnknownCompressionType = errors.New("unknown compression")
 )
 
 func (reader *Reader) getDecompressor(compressedReader io.Reader, dcType format.CompressionType) (io.Reader, error) {
@@ -23,7 +23,7 @@ func (reader *Reader) getDecompressor(compressedReader io.Reader, dcType format.
 	case format.COMPRESSION_ZSTD:
 		return zstd.NewReader(compressedReader)
 	default:
-		return nil, UnknownCompressionError
+		return nil, errUnknownCompressionType
 	}
 
 }

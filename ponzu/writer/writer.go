@@ -63,83 +63,66 @@ func (archive *ArchiveWriter) AppendBytes(
 
 	// Build preamble
 
+	// we can safely assume that if there is data, we can get the length of the data.
 	dlen := uint64(0)
 	if data != nil {
 		dlen = uint64(len(data))
 	}
 
-	preamble := format.NewPreamble(rtype, compression, flags, dlen)
+	// we may or may not have CBOR data, depending on if we have any metadata to append.
 
-	hash, err := blake2b.New512(nil)
-	if err != nil {
-		// That's a problem
-		return errors.Wrap(err, "Failed to initialize BLAKE2b hash")
-	}
+	var err error
+	var cborData []byte
 
-	// CBOR encode the metadata
-	cborData, err := cbor.Marshal(recordInfo)
+	if recordInfo != nil {
+		// CBOR encode the metadata
+		cborData, err = cbor.Marshal(recordInfo)
 
-	if err != nil {
-		return errors.Wrap(err, "Failed to marshal metadata to CBOR.")
-	}
-
-	// pad the CBOR data out to 4K
-
-	headerbuf := new(bytes.Buffer)
-
-	preamble.WritePreamble(headerbuf)
-	headerbuf.Write(cborData)
-	// now, pad it out
-
-	// This is dumb, but it works
-	for {
-		if headerbuf.Len() < int(format.BLOCK_SIZE) {
-			headerbuf.WriteByte(0)
-		} else {
-			break
-		}
-	}
-
-	// Hash the thing
-	recordbytes := headerbuf.Bytes()
-	_, err = hash.Write(recordbytes)
-
-	if err != nil {
-		return errors.Wrap(err, "Failed to hash header content")
-	}
-
-	if data != nil {
-		_, err = hash.Write(data)
 		if err != nil {
-			return errors.Wrap(err, "failed to hash body content")
+			return errors.Wrap(err, "Failed to marshal metadata to CBOR.")
 		}
+	} else {
+		cborData = []byte{}
 	}
 
-	copy(preamble.Checksum[0:], hash.Sum(nil))
-	copy(recordbytes[0:], preamble.ToBytes())
-
-	if _, err = archive.blockio.Write(recordbytes); err != nil {
-		return errors.Wrap(err, "failed to write to underlying stream")
-	}
+	metadataChecksum := blake2b.Sum512(cborData)
+	metadataLengh := len(cborData)
 
 	if data != nil {
 
-		newdata, err := archive.getCompressedChunk(data, compression)
+		data, err = archive.getCompressedChunk(data, compression)
 
 		if err != nil {
 			return errors.Wrap(err, "failed to compress data")
 		}
-
-		if _, err = archive.blockio.WriteWhole(newdata); err != nil {
-			return errors.Wrap(err, "failed to write to underlying stream")
-		}
+	} else {
+		data = []byte{}
 	}
+
+	bodyChecksum := blake2b.Sum512(data)
+
+	headerbuf := new(bytes.Buffer)
+
+	preamble := format.NewPreamble(rtype, compression, flags, dlen, bodyChecksum[:], uint16(metadataLengh), metadataChecksum[:])
+
+	// Write the preamble out
+	preamble.WritePreamble(headerbuf)
+	// Now write the cbor data to the buffer
+	headerbuf.Write(cborData)
+
+	// Write the full record header to the block io -- this pads out to the next 4K block.
+	archive.blockio.WriteWhole(headerbuf.Bytes())
+	// if we have data, append it here.
+	if data != nil {
+		archive.blockio.WriteWhole(data)
+	}
+
 	return nil
 }
 
 func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format.RecordFlags, compression format.CompressionType, recordInfo any, stream io.Reader) error {
 
-	chunkReader := ioutil.NewBlockReader(stream, int64(archive.MaxReadBuffer)/2)
+	chunkReader := ioutil.NewBlockReader(stream, archive.MaxReadBuffer/2)
 
 	// Read at least the first chunk
 
@@ -153,7 +136,7 @@ func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format
 	} else {
 		// Tick on the CONTINUES flag
 
-		flags ^= format.RECORD_FLAG_CONTINUES
+		flags |= format.RECORD_FLAG_CONTINUES
 		if err = archive.AppendBytes(rtype, flags, compression, recordInfo, chunk); err != nil {
 			return errors.Wrap(err, "Failed to write first chunk in continue chain")
 		} else {

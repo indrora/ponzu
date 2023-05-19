@@ -8,22 +8,23 @@ import (
 )
 
 type BlockWriter struct {
-	writer io.Writer
-	modulo int64
-	bsize  int64
+	writer              io.Writer
+	writtenSinceRealign uint64
+	bsize               uint64
 }
 
-func NewBlockWriter(destination io.Writer, blockSize int64) *BlockWriter {
+func NewBlockWriter(destination io.Writer, blockSize uint64) *BlockWriter {
 	return &BlockWriter{
-		writer: destination,
-		bsize:  blockSize,
-		modulo: 0,
+		writer:              destination,
+		bsize:               blockSize,
+		writtenSinceRealign: 0,
 	}
 }
 
+// Writes bytes to the
 func (k *BlockWriter) Write(p []byte) (n int, err error) {
 	written, err := k.writer.Write(p)
-	k.modulo = int64(written) % k.bsize
+	k.writtenSinceRealign += uint64(written)
 	return written, err
 }
 
@@ -37,14 +38,24 @@ func (k *BlockWriter) WriteWhole(p []byte) (n int, err error) {
 }
 
 func (k *BlockWriter) Align() error {
-	if k.modulo != 0 {
+
+	if k.writtenSinceRealign > uint64(k.bsize) {
+		for k.writtenSinceRealign > uint64(k.bsize) {
+			k.writtenSinceRealign -= uint64(k.bsize)
+		}
+	}
+	if k.writtenSinceRealign != 0 {
 		// Write out the remaining portion of a block
-		_, err := k.writer.Write(bytes.Repeat([]byte{0}, (int)(k.bsize-k.modulo)))
+		toWrite := k.bsize - k.writtenSinceRealign
+
+		empty := bytes.Repeat([]byte{0}, int(toWrite))
+
+		_, err := k.writer.Write(empty)
 		if err != nil {
 			return errors.Wrap(err, "Failed to finish out block")
 		}
 	}
-	k.modulo = 0
+	k.writtenSinceRealign = 0
 	return nil
 }
 

@@ -41,10 +41,21 @@ type Preamble struct {
 	// Number of bytes used in final data-block
 	Modulo uint16
 	// Checksum of data blocks
-	Checksum [64]byte
+	DataChecksum [64]byte
+	// Metadata Length
+	MetadataLength uint16
+	// checksum of the metadata
+	MetadataChecksum [64]byte
 }
 
-func NewPreamble(rType RecordType, compression CompressionType, flags RecordFlags, length uint64) Preamble {
+func NewPreamble(
+	rType RecordType,
+	compression CompressionType,
+	flags RecordFlags,
+	length uint64,
+	dataChecksum []byte,
+	metadataLen uint16,
+	metadataChecksum []byte) Preamble {
 
 	bcount := uint64(0)
 	modulo := uint16(0)
@@ -61,14 +72,16 @@ func NewPreamble(rType RecordType, compression CompressionType, flags RecordFlag
 	}
 
 	return Preamble{
-		Magic:       [6]byte{'P', 'O', 'N', 'Z', 'U', 0},
-		Rtype:       rType,
-		Compression: compression,
-		Flags:       flags,
-		Checksum:    [64]byte{0},
+		Magic:        [6]byte{'P', 'O', 'N', 'Z', 'U', 0},
+		Rtype:        rType,
+		Compression:  compression,
+		Flags:        flags,
+		DataChecksum: [64]byte(dataChecksum),
 		// computed fields
-		DataLen: bcount,
-		Modulo:  modulo,
+		DataLen:          bcount,
+		Modulo:           modulo,
+		MetadataLength:   metadataLen,
+		MetadataChecksum: [64]byte(metadataChecksum),
 	}
 }
 
@@ -101,7 +114,7 @@ func ReadPreamble(r io.Reader) (*Preamble, error) {
 
 }
 
-const BLOCK_SIZE int64 = 4096
+const BLOCK_SIZE uint64 = 4096
 
 const (
 	RECORD_TYPE_CONTROL     RecordType = 0
