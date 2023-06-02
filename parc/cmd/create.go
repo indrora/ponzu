@@ -19,7 +19,11 @@ var createCmd = &cobra.Command{
 	
 example:
 
-parc create myarchive.pzarc a/* b/*`,
+parc create myarchive.pzarc a/* b/*
+
+create uses the same semantics as cp: relative paths will be resolved. 
+
+`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
 			fmt.Fprintln(cmd.ErrOrStderr(), "Expected 2 arguments, at least")
