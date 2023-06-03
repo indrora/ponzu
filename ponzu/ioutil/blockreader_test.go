@@ -13,7 +13,7 @@ func TestBlockReader_ReadBlock(t *testing.T) {
 	testCases := []struct {
 		name      string
 		data      []byte
-		chunkSize int64
+		chunkSize uint64
 		expected  [][]byte
 		expectErr error
 	}{

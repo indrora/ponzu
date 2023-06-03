@@ -40,7 +40,7 @@ func TestWriter(t *testing.T) {
 		t.Fail()
 	}
 
-	if int64(buffer.Len()) != 3*format.BLOCK_SIZE {
+	if uint64(buffer.Len()) != 3*format.BLOCK_SIZE {
 		t.Errorf("Expected more bytes. Got %d, expected %d", buffer.Len(), 3*format.BLOCK_SIZE)
 		t.Log(spew.Sdump(buffer.Bytes()))
 
@@ -80,7 +80,7 @@ func TestWriterEncode(t *testing.T) {
 
 	newbytes := buff.Bytes()
 
-	if int64(len(newbytes)) != 3*format.BLOCK_SIZE {
+	if uint64(len(newbytes)) != 3*format.BLOCK_SIZE {
 		t.Fatalf("Wrong number of bytes written: Expected %v, got %v", 3*format.BLOCK_SIZE, len(newbytes))
 	}
 

@@ -6,6 +6,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
@@ -16,13 +18,9 @@ var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a Ponzu archive",
 	Long: `Create an archive from a specified set of paths.
+
+
 	
-example:
-
-parc create myarchive.pzarc a/* b/*
-
-create uses the same semantics as cp: relative paths will be resolved. 
-
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
@@ -38,33 +36,58 @@ create uses the same semantics as cp: relative paths will be resolved.
 		prefix := cmd.Flag("prefix")
 		comment := cmd.Flag("comment")
 
+		files := make(map[string]string)
+
 		fmt.Printf("archive name = \"%v\", prefix = \"%v\", comment = \"%v\"\n", archiveFname, prefix.Value, comment.Value)
 		for _, pathn := range archivePaths {
 			// walk every file in those paths.
 
-			pathstat, err := os.Lstat(pathn)
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Couldn't stat %v, %v\n", pathn, err)
-				continue
-			}
+			// First, clean the path:
 
-			if pathstat.IsDir() {
-				fmt.Println("Found a directory: " + pathstat.Name())
-			} else {
+			pathn_clean := filepath.Clean(pathn)
+			fmt.Println(pathn_clean)
 
-				if pathstat.Mode()&os.ModeSymlink != 0 {
-					target, _ := os.Readlink(pathn)
-					fmt.Printf("%v -> link to %v\n", pathn, target)
-				} else {
-					spew.Dump(pathstat)
+			// check to see if it's a glob
+
+			if strings.ContainsRune(pathn, '*') {
+				// Get the base of the path
+				fmt.Println("Path is a glob")
+
+				path_base, _ := strings.CutSuffix(pathn, "*")
+				if strings.HasSuffix(path_base, string(filepath.Separator)) {
+					path_base = filepath.Dir(path_base)
 				}
 
+			} else {
+
+				pathstat, err := os.Lstat(pathn)
+				if err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Couldn't stat %v, %v\n", pathn, err)
+					continue
+				}
+
+				if pathstat.IsDir() {
+					fmt.Println("Found a directory: " + pathstat.Name())
+				} else {
+
+					if pathstat.Mode()&os.ModeSymlink != 0 {
+						target, _ := os.Readlink(pathn)
+						fmt.Printf("%v -> link to %v\n", pathn, target)
+					} else {
+						spew.Dump(pathstat)
+					}
+
+				}
 			}
 
 		}
 
+		for k, v := range files {
+			fmt.Printf("%s -> %v", k, v)
+		}
+
 	},
-	Example: "parc create myarchive.pzarc a/*",
+	Example: "parc create myarchive.pzarc a/ foo",
 }
 
 func init() {

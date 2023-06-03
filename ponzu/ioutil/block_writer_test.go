@@ -53,7 +53,7 @@ func TestMultiBlock(t *testing.T) {
 	writer.Write(some_data)
 	t.Log(spew.Sprint(buffer.Bytes()))
 	// Check the internal bit
-	if writer.modulo != 27%16 {
+	if writer.writtenSinceRealign != 27 {
 		t.Fail()
 	}
 	// we haven't aligned the write yet, so
