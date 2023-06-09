@@ -5,88 +5,68 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 )
+
+func createMain(cmd *cobra.Command, args []string) {
+	if len(args) < 2 {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Expected 2 arguments, at least")
+		return
+	}
+
+	// we're going to just list the files out so far
+
+	archiveFname := args[0]
+	archivePaths := args[1:]
+
+	prefix := cmd.Flag("prefix")
+	comment := cmd.Flag("comment")
+
+	files := make(map[string]string)
+
+	fmt.Printf("archive name = \"%v\", prefix = \"%v\", comment = \"%v\"\n", archiveFname, prefix.Value, comment.Value)
+	for _, pathn := range archivePaths {
+		fstat, err := os.Stat(pathn)
+		if err != nil {
+			cmd.PrintErrln(err)
+		}
+
+		// if it's a directory, get the files under it
+		if fstat.IsDir() {
+
+			//prefix := filepath.Clean(pathn)
+
+			fs.WalkDir(os.DirFS("."), pathn, func(path string, d fs.DirEntry, err error) error {
+				fmt.Println(path)
+
+				return nil
+			})
+
+		}
+	}
+
+	for k, v := range files {
+		fmt.Printf("%s -> %v", k, v)
+	}
+
+}
 
 // createCmd represents the create command
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a Ponzu archive",
-	Long: `Create an archive from a specified set of paths.
+	Long: `Create an archive from a specified set of content roots.
 
+	Directories will have their contents added. Two paths that contain the same content will be merged.
+	Files are added by their base name (foo/bar.txt -> bar.txt)
 
-	
+	Paths containing 
+
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 2 {
-			fmt.Fprintln(cmd.ErrOrStderr(), "Expected 2 arguments, at least")
-			return
-		}
-
-		// we're going to just list the files out so far
-
-		archiveFname := args[0]
-		archivePaths := args[1:]
-
-		prefix := cmd.Flag("prefix")
-		comment := cmd.Flag("comment")
-
-		files := make(map[string]string)
-
-		fmt.Printf("archive name = \"%v\", prefix = \"%v\", comment = \"%v\"\n", archiveFname, prefix.Value, comment.Value)
-		for _, pathn := range archivePaths {
-			// walk every file in those paths.
-
-			// First, clean the path:
-
-			pathn_clean := filepath.Clean(pathn)
-			fmt.Println(pathn_clean)
-
-			// check to see if it's a glob
-
-			if strings.ContainsRune(pathn, '*') {
-				// Get the base of the path
-				fmt.Println("Path is a glob")
-
-				path_base, _ := strings.CutSuffix(pathn, "*")
-				if strings.HasSuffix(path_base, string(filepath.Separator)) {
-					path_base = filepath.Dir(path_base)
-				}
-
-			} else {
-
-				pathstat, err := os.Lstat(pathn)
-				if err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Couldn't stat %v, %v\n", pathn, err)
-					continue
-				}
-
-				if pathstat.IsDir() {
-					fmt.Println("Found a directory: " + pathstat.Name())
-				} else {
-
-					if pathstat.Mode()&os.ModeSymlink != 0 {
-						target, _ := os.Readlink(pathn)
-						fmt.Printf("%v -> link to %v\n", pathn, target)
-					} else {
-						spew.Dump(pathstat)
-					}
-
-				}
-			}
-
-		}
-
-		for k, v := range files {
-			fmt.Printf("%s -> %v", k, v)
-		}
-
-	},
+	Run:     createMain,
 	Example: "parc create myarchive.pzarc a/ foo",
 }
 
