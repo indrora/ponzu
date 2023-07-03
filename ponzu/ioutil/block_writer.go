@@ -49,7 +49,6 @@ func (k *BlockWriter) Align() error {
 		toWrite := k.bsize - k.writtenSinceRealign
 
 		empty := bytes.Repeat([]byte{0}, int(toWrite))
-
 		_, err := k.writer.Write(empty)
 		if err != nil {
 			return errors.Wrap(err, "Failed to finish out block")

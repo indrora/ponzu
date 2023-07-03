@@ -2,7 +2,10 @@ package writer
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"io/fs"
+	"os"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
@@ -63,12 +66,6 @@ func (archive *ArchiveWriter) AppendBytes(
 
 	// Build preamble
 
-	// we can safely assume that if there is data, we can get the length of the data.
-	dlen := uint64(0)
-	if data != nil {
-		dlen = uint64(len(data))
-	}
-
 	// we may or may not have CBOR data, depending on if we have any metadata to append.
 
 	var err error
@@ -89,14 +86,20 @@ func (archive *ArchiveWriter) AppendBytes(
 	metadataLengh := len(cborData)
 
 	if data != nil {
-
+		oldatalen := len(data)
 		data, err = archive.getCompressedChunk(data, compression)
-
+		fmt.Printf("Compressed %d bytes to %d bytes\n", oldatalen, len(data))
 		if err != nil {
 			return errors.Wrap(err, "failed to compress data")
 		}
 	} else {
 		data = []byte{}
+	}
+
+	// we can safely assume that if there is data, we can get the length of the data.
+	dlen := uint64(0)
+	if data != nil {
+		dlen = uint64(len(data))
 	}
 
 	bodyChecksum := blake2b.Sum512(data)
@@ -159,6 +162,21 @@ func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format
 
 	}
 
+}
+
+func (archive *ArchiveWriter) AppendFile(path string, source string, compressionType format.CompressionType, info fs.FileInfo) error {
+	fstream, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer fstream.Close()
+
+	meta := format.File{
+		Name:    path,
+		ModTime: info.ModTime(),
+	}
+
+	return archive.AppendStream(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, compressionType, meta, fstream)
 }
 
 func (archive *ArchiveWriter) Close() error {

@@ -2,7 +2,6 @@ package writer
 
 import (
 	"bytes"
-	"io"
 
 	"github.com/andybalholm/brotli"
 	"github.com/indrora/ponzu/ponzu/format"
@@ -12,33 +11,31 @@ import (
 
 func (archive *ArchiveWriter) getCompressedChunk(data []byte, compressor format.CompressionType) ([]byte, error) {
 
-	buf := new(bytes.Buffer)
-
-	writer, err := archive.GetCompressor(buf, compressor)
-
-	if err != nil {
-		return nil, err
-	}
-	_, err = writer.Write(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-
-}
-
-func (archive *ArchiveWriter) GetCompressor(writer io.Writer, compressor format.CompressionType) (io.Writer, error) {
-
 	switch compressor {
 	case format.COMPRESSION_NONE:
-		return writer, nil
+		return data, nil
 	case format.COMPRESSION_BROTLI:
-		return brotli.NewWriter(writer), nil
+		buf := new(bytes.Buffer)
+		comp := brotli.NewWriter(buf)
+		_, err := comp.Write(data)
+		if err != nil {
+			return nil, err
+		}
+		comp.Close()
+		return buf.Bytes(), nil
 	case format.COMPRESSION_ZSTD:
-		return zstd.NewWriter(writer)
-	default:
-		return nil, errors.New("Unknown compressor")
-	}
+		buf := new(bytes.Buffer)
 
+		cctx, err := zstd.NewWriter(buf)
+		if err != nil {
+			return nil, err
+		}
+		cctx.Write(data)
+
+		cctx.Close()
+
+		return buf.Bytes(), nil
+	default:
+		return nil, errors.New("unkonwn compressor")
+	}
 }
