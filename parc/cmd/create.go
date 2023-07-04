@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/indrora/ponzu/ponzu/format"
@@ -147,25 +148,34 @@ func createMain(cmd *cobra.Command, args []string) {
 
 	writer.AppendStart(prefix.Value.String(), comment.Value.String())
 
-	for k, v := range files {
-		fmt.Printf("%s -> %v: ", k, v)
+	archive_files := make([]string, 0, len(files))
+	for k := range files {
+		archive_files = append(archive_files, k)
+	}
+	// sort the keys for deterministic output
+	sort.Strings(archive_files)
+
+	for _, archiveFilePath := range archive_files {
+		localFilePath := files[archiveFilePath]
+
+		fmt.Printf("%s -> %v: ", archiveFilePath, localFilePath)
 
 		mask := os.ModeDir | os.ModeSymlink
 
-		statn, err := os.Lstat(v)
+		statn, err := os.Lstat(localFilePath)
 		if err == nil {
 			switch mode := statn.Mode(); mode & mask {
 			case os.ModeDir:
 				fmt.Println("Mode is directory")
-				writer.AppendDirectory(k, statn)
+				writer.AppendDirectory(archiveFilePath, statn)
 			case os.ModeSymlink:
 				fmt.Println("Mode is Symlink. ")
-				linkinfo, err := os.Readlink(v)
+				linkinfo, err := os.Readlink(localFilePath)
 				if err != nil {
-					cmd.PrintErrf("Failed to read symlink %v: %v\n", v, err)
+					cmd.PrintErrf("Failed to read symlink %v: %v\n", localFilePath, err)
 				} else {
 					fmt.Printf("Symlink points to %v\n", linkinfo)
-					writer.AppendSymlink(k, linkinfo, statn)
+					writer.AppendSymlink(archiveFilePath, linkinfo, statn)
 				}
 			default:
 				fmt.Printf("Regular file, size=%v, modtime=%v\n", statn.Size(), statn.ModTime())
@@ -175,11 +185,10 @@ func createMain(cmd *cobra.Command, args []string) {
 					compression = format.COMPRESSION_ZSTD
 				}
 
-				if err = writer.AppendFile(k, v, compression, statn); err != nil {
+				if err = writer.AppendFile(archiveFilePath, localFilePath, compression, statn); err != nil {
 					cmd.PrintErr(err)
 					return
 				}
-
 			}
 		} else {
 			cmd.PrintErrf("Failed to stat file: %v", err)
@@ -199,14 +208,13 @@ var createCmd = &cobra.Command{
 	Directories will have their contents added. Two paths that contain the same content will be merged.
 	Files are added by their base name (foo/bar.txt -> bar.txt)
 
-	Paths containing 
-
 `,
 	Run:     createMain,
 	Example: "parc create myarchive.pzarc a/ foo",
 }
 
 var BuffSize *uint64
+var UseBrotli *bool
 
 func init() {
 	rootCmd.AddCommand(createCmd)
@@ -214,4 +222,5 @@ func init() {
 	createCmd.Flags().String("prefix", "", "Archive prefix")
 	BuffSize = createCmd.Flags().Uint64("buff-size", 5000, "Number of blocks to read into memory at once (default 5000, 2GB)")
 	createCmd.Flags().String("chdir", ".", "Search this path to find relative paths")
+	UseBrotli = createCmd.Flags().Bool("brotli", false, "use Brotli compression vs. ZStandard")
 }
