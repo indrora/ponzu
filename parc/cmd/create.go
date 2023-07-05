@@ -181,8 +181,12 @@ func createMain(cmd *cobra.Command, args []string) {
 				fmt.Printf("Regular file, size=%v, modtime=%v\n", statn.Size(), statn.ModTime())
 
 				compression := format.COMPRESSION_NONE
-				if statn.Size() > int64(format.BLOCK_SIZE) {
-					compression = format.COMPRESSION_ZSTD
+				if !*NoCompress && statn.Size() > int64(format.BLOCK_SIZE) {
+					if *UseBrotli {
+						compression = format.COMPRESSION_BROTLI
+					} else {
+						compression = format.COMPRESSION_ZSTD
+					}
 				}
 
 				if err = writer.AppendFile(archiveFilePath, localFilePath, compression, statn); err != nil {
@@ -208,6 +212,11 @@ var createCmd = &cobra.Command{
 	Directories will have their contents added. Two paths that contain the same content will be merged.
 	Files are added by their base name (foo/bar.txt -> bar.txt)
 
+	to compress a single folder without making a subdiretory:
+
+	parc create myarchive.pzarc --chdir my-path . 
+
+
 `,
 	Run:     createMain,
 	Example: "parc create myarchive.pzarc a/ foo",
@@ -215,6 +224,8 @@ var createCmd = &cobra.Command{
 
 var BuffSize *uint64
 var UseBrotli *bool
+var NoCompress *bool
+var ExcludePaths *[]string
 
 func init() {
 	rootCmd.AddCommand(createCmd)
@@ -222,5 +233,6 @@ func init() {
 	createCmd.Flags().String("prefix", "", "Archive prefix")
 	BuffSize = createCmd.Flags().Uint64("buff-size", 5000, "Number of blocks to read into memory at once (default 5000, 2GB)")
 	createCmd.Flags().String("chdir", ".", "Search this path to find relative paths")
+	NoCompress = createCmd.Flags().Bool("no-compress", false, "Disable compression")
 	UseBrotli = createCmd.Flags().Bool("brotli", false, "use Brotli compression vs. ZStandard")
 }
