@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/ioutil"
 	"golang.org/x/crypto/blake2b"
@@ -88,15 +87,10 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.MetadataChecksum, metaHashCheck)
 	}
 
-	var metadata map[interface{}]interface{}
+	var metadata any = nil
 
 	if len(cborDataBytes) > 0 {
-		err = cbor.Unmarshal(cborDataBytes, &metadata)
-
-		if err != nil {
-			reader.stream.Realign()
-			return mPreamble, nil, err
-		}
+		metadata = unmarshalMetadata(mPreamble, cborDataBytes)
 	}
 
 	switch mPreamble.Rtype {

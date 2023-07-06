@@ -4,12 +4,12 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
@@ -79,60 +79,9 @@ func explainRecord(preamble format.Preamble, meta any) {
 	fmt.Printf("Metadata Checksum: %x\n", preamble.MetadataChecksum)
 
 	if meta != nil {
-		metastruct, ok := meta.(map[interface{}]interface{})
-		if ok {
-			metajson, _ := json.MarshalIndent(metastruct, "", "  ")
-			fmt.Printf("%v", metajson)
-		}
-
-		/*
-
-				if meta != nil {
-
-					switch preamble.Rtype {
-					case format.RECORD_TYPE_CONTROL:
-						fmt.Println("-- Control record Metadata -- ")
-						if preamble.Flags == format.RECORD_FLAG_CONTROL_START {
-							if soa := castOrNil[format.StartOfArchive](&meta); soa != nil {
-								fmt.Printf("Prefix: %s\nComment:%s\n", soa.Prefix, soa.Comment)
-								fmt.Printf("Host OS: %s\n", soa.Host)
-								fmt.Printf("Archive version: %d", soa.Version)
-							}
-						}
-					case format.RECORD_TYPE_FILE:
-						fmt.Println("-> File metadata")
-						if file := castOrNil[format.File](&meta); file != nil {
-							fmt.Printf("File Path: %s\n", file.Name)
-							fmt.Printf("File ModTime: %s\n", file.ModTime)
-						} else {
-							encoder := json.NewEncoder(os.Stdout)
-							encoder.Encode(meta)
-						}
-					case format.RECORD_TYPE_DIRECTORY:
-			v			if dir := castOrNil[format.Directory](&meta); dir != nil {
-							fmt.Printf("Directory Path: %s\n", dir.Name)
-						} else {
-							encoder := json.NewEncoder(os.Stdout)
-							encoder.Encode(meta)
-						}
-					case format.RECORD_TYPE_SYMLINK:
-						fmt.Println("-> symlink")
-						if sym := castOrNil[format.Symlink](&meta); sym != nil {
-							fmt.Printf("Symlink Path: %s -> %s\n", sym.Name, sym.Target)
-						} else {
-							encoder := json.NewEncoder(os.Stdout)
-							encoder.Encode(meta)
-						}
-					case format.RECORD_TYPE_CONTINUE:
-						// No metadata for continue records.
-					default:
-						fmt.Printf("Unknown record type %d\n", preamble.Rtype)
-						// turn the metadata into json
-						encoder := json.NewEncoder(os.Stdout)
-						encoder.Encode(meta)
-					}
-				} */
+		spew.Dump(meta)
 	}
+
 }
 
 func init() {

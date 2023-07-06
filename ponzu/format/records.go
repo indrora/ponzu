@@ -15,7 +15,7 @@ the preamble, plus a Reader that is used in context.
 
 type RecordBase struct {
 	// Preamble
-	Preamble Preamble `cbor:"-"`
+	//Preamble Preamble `cbor:"-"`
 }
 
 // All archives start with a Start of Archive header
