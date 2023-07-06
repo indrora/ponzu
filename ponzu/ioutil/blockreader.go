@@ -38,7 +38,13 @@ func (br *BlockReader) Realign() error {
 	}
 
 	if br.realignBytes > 0 {
-		_, err := br.reader.Discard(int(br.realignBytes - br.ChunkSize))
+		// Read out the remaining bytes
+
+		buf := make([]byte, br.ChunkSize-br.realignBytes)
+		_, err := io.ReadFull(br.reader, buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
 		br.realignBytes = 0
 		return err
 	}

@@ -49,13 +49,12 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 
 	if reader.lastPreamble != nil {
 		// we have a previous header!
-
-		for idx := uint64(0); idx < reader.lastPreamble.DataLen; idx++ {
-			_, err := reader.stream.ReadBlock()
-			if err != nil {
-				return nil, nil, err
-			}
+		// exhaust any data
+		if reader.lastPreamble.DataLen > 0 {
+			io.CopyN(io.Discard, reader.stream, int64(reader.lastPreamble.DataLen*format.BLOCK_SIZE))
 		}
+		reader.lastPreamble = nil
+
 	}
 
 	var err error
@@ -64,6 +63,12 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 
 	if err = binary.Read(reader.stream, binary.BigEndian, mPreamble); err != nil {
 		return nil, nil, errors.Join(err, ErrExpectedHeader)
+	}
+
+	// verify preamble magic
+
+	if !bytes.Equal(mPreamble.Magic[:], format.PREAMBLE_BYTES[:]) {
+		return nil, nil, ErrExpectedHeader
 	}
 
 	// Parse from the preamble the metadata.
@@ -83,14 +88,15 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.MetadataChecksum, metaHashCheck)
 	}
 
-	decoder := cbor.NewDecoder(cborData)
+	var metadata map[interface{}]interface{}
 
-	var metadata interface{}
+	if len(cborDataBytes) > 0 {
+		err = cbor.Unmarshal(cborDataBytes, &metadata)
 
-	err = decoder.Decode(metadata)
-
-	if err != nil {
-		return mPreamble, nil, err
+		if err != nil {
+			reader.stream.Realign()
+			return mPreamble, nil, err
+		}
 	}
 
 	switch mPreamble.Rtype {
