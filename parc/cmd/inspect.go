@@ -11,6 +11,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
+	"github.com/indrora/ponzu/ponzu/format/metadata"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,9 @@ including compression information and similar. `,
 }
 
 func inspectArchive(path string) {
+
+	verbose, _ := rootCmd.Flags().GetBool("verbose")
+
 	fileh, err := os.Open(path)
 	if err != nil {
 		return
@@ -52,7 +56,14 @@ func inspectArchive(path string) {
 		if !errors.Is(err, io.EOF) {
 
 			if preamble != nil {
-				explainRecord(*preamble, meta)
+				if verbose {
+					fmt.Println("Preamble:")
+					spew.Dump(preamble)
+					fmt.Println("Metadata:")
+					spew.Dump(meta)
+				} else {
+					explainRecord(*preamble, meta)
+				}
 			} else {
 				fmt.Printf("Preamble was nil... Something went wrong")
 
@@ -69,18 +80,30 @@ func explainRecord(preamble format.Preamble, meta any) {
 
 	switch preamble.Rtype {
 	case format.RECORD_TYPE_CONTROL:
-		fmt.Println("Control record")
+		fmt.Print("Control record: ")
 		if preamble.Flags == format.RECORD_FLAG_CONTROL_START {
 			fmt.Println("Begin archive.", "ponzu version", meta.(*format.StartOfArchive).Version)
 		} else if preamble.Flags == format.RECORD_FLAG_CONTROL_END {
 			fmt.Println("End of archive marker")
+		} else {
+			fmt.Println("Unknown control record.")
 		}
 	case format.RECORD_TYPE_DIRECTORY:
 		fmt.Println("Directory: ", meta.(*format.Directory).Name)
 	case format.RECORD_TYPE_FILE:
 		fmeta := meta.(*format.File)
+		mmeta, ok := metadata.TransmogrifyCbor[metadata.CommonMetadata](fmeta.Metadata.(map[any]any))
 		fmt.Println("File ", fmeta.Name, "modtime ", fmeta.ModTime)
+		if ok {
+			if mmeta.FileSize != nil {
+				fmt.Printf("Size %d bytes\n", *mmeta.FileSize)
+			}
+			if mmeta.MimeType != nil {
+				fmt.Printf("Mimetype %s\n", *mmeta.MimeType)
+			}
+		}
 		fmt.Printf("Body checksum: %x\n", preamble.DataChecksum)
+
 	default:
 		fmt.Printf("======Record ======\n")
 		fmt.Printf("Type: %d\n", preamble.Rtype)
@@ -90,7 +113,6 @@ func explainRecord(preamble format.Preamble, meta any) {
 		fmt.Printf("Checksum: %x\n", preamble.DataChecksum)
 		fmt.Printf("Metadata Length: %d\n", preamble.MetadataLength)
 		fmt.Printf("Metadata Checksum: %x\n", preamble.MetadataChecksum)
-
 		if meta != nil {
 			spew.Dump(meta)
 		}

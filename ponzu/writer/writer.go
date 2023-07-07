@@ -9,6 +9,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
+	"github.com/indrora/ponzu/ponzu/format/metadata"
 	"github.com/indrora/ponzu/ponzu/ioutil"
 	pio "github.com/indrora/ponzu/ponzu/ioutil"
 	"github.com/pkg/errors"
@@ -171,9 +172,13 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 	}
 	defer fstream.Close()
 
+	size := uint64(info.Size())
 	meta := format.File{
 		Name:    path,
 		ModTime: info.ModTime(),
+		Metadata: metadata.CommonMetadata{
+			FileSize: &size,
+		},
 	}
 
 	return archive.AppendStream(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, compressionType, meta, fstream)

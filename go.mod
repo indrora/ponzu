@@ -11,6 +11,8 @@ require (
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/pkg/xattr v0.4.9 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
@@ -18,7 +20,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1 // indirect
+	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f // indirect
 )
 
 require (

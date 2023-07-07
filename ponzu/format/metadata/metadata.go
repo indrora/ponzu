@@ -2,10 +2,25 @@ package metadata
 
 import (
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 func MakePointer[T any](x T) *T {
 	return &x
+}
+
+func TransmogrifyCbor[T any](meta map[any]any) (*T, bool) {
+	ret := new(T)
+	bdata, err := cbor.Marshal(meta)
+	if err != nil {
+		return nil, false
+	}
+	err = cbor.Unmarshal(bdata, ret)
+	if err != nil {
+		return nil, false
+	}
+	return ret, true
 }
 
 // The common metadata that is used by all forms
