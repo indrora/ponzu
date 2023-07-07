@@ -4,9 +4,12 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -30,7 +33,22 @@ func Execute() {
 	}
 }
 
+func GenDocs() {
+	if err := os.Mkdir("./docs/parc", 0775); err != nil && err != os.ErrExist {
+		if errors.Is(err, os.ErrExist) {
+			fmt.Println("Docs folder already exists, OK.")
+		} else {
+			fmt.Println("failed to make dir:", err)
+			return
+		}
+	}
+	err := doc.GenMarkdownTree(rootCmd, "./docs/parc")
+	if err != nil {
+		fmt.Println("failed to make docs:", err)
+	}
+
+}
+
 func init() {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Write detailed information to the terminal")
-
 }
