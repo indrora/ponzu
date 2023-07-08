@@ -18,7 +18,11 @@ func main() {
 	if err != nil {
 		fmt.Println("failed to stat", os.Args[1], err)
 	}
+	fmt.Println("dump(stat)")
 	spew.Dump(stat)
+	fmt.Println("dump(stat.Sys())")
+	spew.Dump(stat.Sys())
+	fmt.Println("-- xattrs --")
 	list_xattrs(stat.Name())
 }
 

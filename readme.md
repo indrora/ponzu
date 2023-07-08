@@ -18,6 +18,36 @@ and bad caveats, pitfalls, etc.
 Additionally, because it has no concept of compression, Tar fails to handle
 large, sparse datasets that are spread across multiple files. 
 
+# Building
+
+To build the reference archiver, run
+
+```sh
+make clean
+make all
+```
+
+This will compile the `parc` binary in `bin/`. 
+
+# Testing
+
+To run the test suite, run 
+
+```sh
+make test
+```
+
+## Spewstat
+
+During development, I needed a mechanism to print the OS-specific stat information.
+spewstat (`make spewstat`) dumps the internal Go representation of
+
+* stat
+* stat.Sys()
+
+and Xattrs. 
+
+
 # License
 
 The text of the Ponzu spec is given CC-BY-SA 4.0

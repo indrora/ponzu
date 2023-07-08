@@ -1,4 +1,4 @@
-.PHONY: parc parcdocs all test clean
+.PHONY: parc parcdocs all test clean spewstat
 
 ifeq ($(OS),Windows_NT)
 clean:
@@ -13,6 +13,8 @@ endif
 
 parc:
 	go build -o bin/ ./parc/
+spewstat:
+	go build -o bin spewstat.go
 parcdocs:
 	go run ./parc/gendocs.go
 test:
