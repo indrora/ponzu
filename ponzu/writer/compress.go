@@ -2,6 +2,7 @@ package writer
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/andybalholm/brotli"
 	"github.com/indrora/ponzu/ponzu/format"
@@ -26,13 +27,19 @@ func (archive *ArchiveWriter) getCompressedChunk(data []byte, compressor format.
 	case format.COMPRESSION_ZSTD:
 		buf := new(bytes.Buffer)
 
-		cctx, err := zstd.NewWriter(buf)
+		var zs io.WriteCloser
+		var err error
+		if archive.zstdDict == nil {
+			zs, err = zstd.NewWriter(buf)
+		} else {
+			zs, err = zstd.NewWriter(buf, zstd.WithEncoderDict(archive.zstdDict))
+		}
 		if err != nil {
 			return nil, err
 		}
-		cctx.Write(data)
+		zs.Write(data)
 
-		cctx.Close()
+		zs.Close()
 
 		return buf.Bytes(), nil
 	default:

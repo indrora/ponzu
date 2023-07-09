@@ -35,6 +35,8 @@ const (
 type Reader struct {
 	stream       *ioutil.BlockReader
 	lastPreamble *format.Preamble
+
+	zstdDict []byte
 }
 
 func NewReader(reader io.Reader) *Reader {
@@ -74,6 +76,9 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	cborData := new(bytes.Buffer)
 	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.MetadataLength))
 
+	// Realign the reader to the start of the data (or next record)
+	reader.stream.Realign()
+
 	if n != int64(mPreamble.MetadataLength) {
 		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of metadata", err, mPreamble.MetadataLength, n)
 	} else if err != nil {
@@ -103,13 +108,21 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		if mPreamble.DataLen != 0 {
 			return mPreamble, metadata, fmt.Errorf("%w: expected 0, got %v", ErrUnexpectedData, mPreamble.DataLen)
 		}
+	case format.RECORD_TYPE_ZDICTIONARY:
+		// Special case: we are going to consume the zstd dictionary and then return the next frame afterwards
+
+		buff := new(bytes.Buffer)
+		err := reader.CopyAll(buff, true)
+		if err != nil {
+			return nil, nil, err
+		} else {
+			reader.zstdDict = buff.Bytes()
+			return reader.Next()
+		}
+
 	default:
 
 	}
-
-	// make sure that the reader is aligned right.
-
-	reader.stream.Realign()
 
 	reader.lastPreamble = mPreamble
 

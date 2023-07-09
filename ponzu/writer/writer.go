@@ -2,7 +2,6 @@ package writer
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -25,6 +24,7 @@ type ArchiveWriter struct {
 	blockio       pio.BlockWriter
 	cHeader       *format.StartOfArchive
 	MaxReadBuffer uint64
+	zstdDict      []byte
 }
 
 func NewWriter(file io.Writer, readBufferSize uint64) *ArchiveWriter {
@@ -34,6 +34,7 @@ func NewWriter(file io.Writer, readBufferSize uint64) *ArchiveWriter {
 		blockio:       *pio.NewBlockWriter(file, format.BLOCK_SIZE),
 		cHeader:       nil,
 		MaxReadBuffer: readBufferSize,
+		zstdDict:      nil,
 	}
 
 }
@@ -87,9 +88,7 @@ func (archive *ArchiveWriter) AppendBytes(
 	metadataLengh := len(cborData)
 
 	if data != nil {
-		oldatalen := len(data)
 		data, err = archive.getCompressedChunk(data, compression)
-		fmt.Printf("Compressed %d bytes to %d bytes\n", oldatalen, len(data))
 		if err != nil {
 			return errors.Wrap(err, "failed to compress data")
 		}
@@ -120,6 +119,25 @@ func (archive *ArchiveWriter) AppendBytes(
 	if data != nil {
 		archive.blockio.WriteWhole(data)
 	}
+
+	return nil
+}
+
+func (archive *ArchiveWriter) AppendZstdDict(dictionary []byte) error {
+	// Write a dictionary record to the archive
+	// Set the compression type to ZSTD_DICTIONARY
+
+	err := archive.AppendBytes(
+		format.RECORD_TYPE_ZDICTIONARY,
+		format.RECORD_FLAG_NONE,
+		format.COMPRESSION_NONE,
+		nil,
+		dictionary)
+	if err != nil {
+
+		return err
+	}
+	archive.zstdDict = dictionary
 
 	return nil
 }

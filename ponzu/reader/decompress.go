@@ -21,7 +21,13 @@ func (reader *Reader) getDecompressor(compressedReader io.Reader, dcType format.
 	case format.COMPRESSION_BROTLI:
 		return brotli.NewReader(compressedReader), nil
 	case format.COMPRESSION_ZSTD:
-		return zstd.NewReader(compressedReader)
+
+		if reader.zstdDict != nil {
+			return zstd.NewReader(compressedReader, zstd.WithDecoderDicts(reader.zstdDict))
+		} else {
+			return zstd.NewReader(compressedReader)
+		}
+
 	default:
 		return nil, errUnknownCompressionType
 	}
