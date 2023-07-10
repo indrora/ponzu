@@ -4,8 +4,10 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,7 +34,7 @@ func getFiles(relroot string, pathn string) (map[string]string, error) {
 	dir_fs := os.DirFS(absroot)
 
 	foundpaths, err := doublestar.Glob(dir_fs, pattern)
-	fmt.Println(foundpaths)
+
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +93,26 @@ func createMain(cmd *cobra.Command, args []string) {
 	writer := writer.NewWriter(fhandle, (*BuffSize)*format.BLOCK_SIZE)
 
 	writer.AppendStart(prefix, comment)
+
+	zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
+	if zstdDict != "" {
+		// try and open the file
+		dict, err := os.Open(zstdDict)
+		if err != nil {
+			cmd.PrintErr(err)
+			return
+		}
+		buff := new(bytes.Buffer)
+		_, err = io.Copy(buff, dict)
+		if err != nil {
+			cmd.PrintErr(err)
+			return
+		}
+		dictBytes := buff.Bytes()
+
+		dict.Close()
+		writer.AppendZstdDict(dictBytes)
+	}
 
 	archive_files := make([]string, 0, len(files))
 	for k := range files {
@@ -160,19 +182,26 @@ func createMain(cmd *cobra.Command, args []string) {
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a Ponzu archive",
-	Long: `Create an archive from a specified set of content roots.
+	Long: `Create an archive from a specified series of glob patterns
 
-	Directories will have their contents added. Two paths that contain the same content will be merged.
-	Files are added by their base name (foo/bar.txt -> bar.txt)
+Example globbing patterns:
 
-	to compress a single folder without making a subdiretory:
+* foo/ (Selects the directory "foo" but no contents)
+* foo/* (Selects all contents of "foo")
+* foo/** (Selects all contents of "foo" recursively)
+* foo/*.txt (Selects all ".txt" files in "foo")
+* foo/*/*.txt (Selects all ".txt" files in subdirectories of "foo")
+* foo/*.{txt,md} (Selects all ".txt" and ".md" files in "foo")
+* foo/{a,b,c}/* (Selects all contents of "foo/a", "foo/b" and "foo/c" non-recursively)
 
-	parc create myarchive.pzarc --chdir my-path . 
+Use ? to specify a single character (foo/??/* selects all contents of two-character subdirectories of "foo")
 
+Double stars act mostly like bash's globstar: **.txt is the same as *.txt, but foo/**/*.txt selects all .txt files in any depth subdirectory of foo.
 
+Depending on your shell, you may have to enclose globbing patterns in single quotes('foo/**').
 `,
 	Run:     createMain,
-	Example: "parc create myarchive.pzarc a/ foo",
+	Example: "parc create myarchive.pzarc a/** foo",
 }
 
 var BuffSize *uint64
