@@ -63,7 +63,7 @@ func NewPreamble(
 	if length == 0 {
 		bcount = 0
 		modulo = 0
-	} else if length > 1 && length < uint64(BLOCK_SIZE) {
+	} else if length > 1 && length <= uint64(BLOCK_SIZE) {
 		bcount = 1 // always a minimum of 1
 		modulo = uint16(length)
 	} else {

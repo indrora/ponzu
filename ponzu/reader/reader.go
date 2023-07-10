@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/ioutil"
 	"golang.org/x/crypto/blake2b"
@@ -51,9 +52,8 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	if reader.lastPreamble != nil {
 		// we have a previous header!
 		// exhaust any data
-		if reader.lastPreamble.DataLen > 0 {
-			io.CopyN(io.Discard, reader.stream, int64(reader.lastPreamble.DataLen*format.BLOCK_SIZE))
-		}
+		reader.CopyTo(io.Discard, false)
+		reader.stream.Realign()
 		reader.lastPreamble = nil
 
 	}
@@ -69,6 +69,7 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	// verify preamble magic
 
 	if !bytes.Equal(mPreamble.Magic[:], format.PREAMBLE_BYTES[:]) {
+		spew.Dump(mPreamble)
 		return nil, nil, ErrExpectedHeader
 	}
 
@@ -98,6 +99,8 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		metadata = unmarshalMetadata(mPreamble, cborDataBytes)
 	}
 
+	reader.lastPreamble = mPreamble
+
 	switch mPreamble.Rtype {
 
 	case format.RECORD_TYPE_CONTROL:
@@ -110,10 +113,12 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		}
 	case format.RECORD_TYPE_ZDICTIONARY:
 		// Special case: we are going to consume the zstd dictionary and then return the next frame afterwards
-
+		spew.Dump(mPreamble)
 		buff := new(bytes.Buffer)
+		fmt.Println("calling CopyAll")
 		err := reader.CopyAll(buff, true)
-		if err != nil {
+		if err != nil && err != io.EOF {
+			fmt.Println("Failed to copy all data for zstd dictionary:", err)
 			return nil, nil, err
 		} else {
 			reader.zstdDict = buff.Bytes()
@@ -123,8 +128,6 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	default:
 
 	}
-
-	reader.lastPreamble = mPreamble
 
 	return mPreamble, metadata, nil
 
@@ -172,7 +175,10 @@ func (reader *Reader) CopyTo(writer io.Writer, validate bool) error {
 
 	// Otherwise, we're going to fill up our buffer.
 
-	bodyLen := ((reader.lastPreamble.DataLen - 1) * uint64(format.BLOCK_SIZE)) + uint64(reader.lastPreamble.Modulo)
+	bodyLen := (reader.lastPreamble.DataLen * format.BLOCK_SIZE)
+	if reader.lastPreamble.Modulo != 0 {
+		bodyLen = bodyLen - (format.BLOCK_SIZE - uint64(reader.lastPreamble.Modulo))
+	}
 
 	// Get a limited reader
 	dataReader := io.LimitReader(reader.stream, int64(bodyLen))
@@ -214,15 +220,22 @@ func (reader *Reader) CopyTo(writer io.Writer, validate bool) error {
 }
 
 func (reader *Reader) CopyAll(writer io.Writer, validate bool) error {
+	fmt.Println("xxx: copyAll")
 more:
 
-	err := reader.CopyTo(writer, validate)
+	if reader.lastPreamble == nil {
+		return io.ErrUnexpectedEOF
+	}
 
-	if err != nil {
+	continues := reader.lastPreamble.Flags&format.RECORD_FLAG_CONTINUES == format.RECORD_FLAG_CONTINUES
+
+	err := reader.CopyTo(writer, validate)
+	fmt.Println("xxx: copy err: ", err)
+	if err != nil && err != io.EOF {
 		return err
 	}
 
-	if reader.lastPreamble.Flags&format.RECORD_FLAG_CONTINUES != 0 {
+	if continues {
 		tPre, _, err := reader.Next()
 		if err != nil {
 			return err

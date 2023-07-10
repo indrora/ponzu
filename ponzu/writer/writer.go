@@ -157,13 +157,11 @@ func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format
 		return errors.Wrap(err, "failed to read block from underlying stream")
 	} else {
 		// Tick on the CONTINUES flag
-
 		flags |= format.RECORD_FLAG_CONTINUES
 		if err = archive.AppendBytes(rtype, flags, compression, recordInfo, chunk); err != nil {
 			return errors.Wrap(err, "Failed to write first chunk in continue chain")
 		} else {
 			for {
-
 				chunk, err = chunkReader.ReadBlock()
 				if err != nil && err != io.EOF {
 					return errors.Wrap(err, "failed to read block from underlying stream")
