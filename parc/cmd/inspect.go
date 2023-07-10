@@ -94,16 +94,22 @@ func explainRecord(preamble format.Preamble, meta any) {
 		fmeta := meta.(*format.File)
 		mmeta, ok := metadata.TransmogrifyCbor[metadata.CommonMetadata](fmeta.Metadata.(map[any]any))
 		fmt.Println("File ", fmeta.Name, "modtime ", fmeta.ModTime)
-		if ok {
-			if mmeta.FileSize != nil {
-				fmt.Printf("Size %d bytes\n", *mmeta.FileSize)
-			}
-			if mmeta.MimeType != nil {
-				fmt.Printf("Mimetype %s\n", *mmeta.MimeType)
-			}
-		}
-		fmt.Printf("Body checksum: %x\n", preamble.DataChecksum)
 
+		if verbose {
+
+			if ok {
+				if mmeta.FileSize != nil {
+					fmt.Printf("Size %d bytes\n", *mmeta.FileSize)
+				}
+				if mmeta.MimeType != nil {
+					fmt.Printf("Mimetype %s\n", *mmeta.MimeType)
+				}
+			}
+			fmt.Printf("Body checksum: %x\n", preamble.DataChecksum)
+		}
+
+	case format.RECORD_TYPE_CONTINUE:
+		fmt.Println("[Previous record continues]")
 	default:
 		fmt.Printf("======Record ======\n")
 		fmt.Printf("Type: %d\n", preamble.Rtype)
