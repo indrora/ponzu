@@ -254,7 +254,7 @@ Streamed archives may be comprised of precomputed file records, in which the pre
 
 ## Character encoding
 
-All filenames in Pitch are UTF-8 encoded.
+All filenames in Ponzu are UTF-8 encoded.
 
 ## Byte Order
 
