@@ -2,9 +2,7 @@
 
 This repository contains the specification for Ponzu, a linear archive format, and Parc, the Ponzu ARChiver reference implementation.
 
-For information on the format itself, see [the spec](docs/spec.md).
-
-For information on the archiver utility, see [the docs](docs/parc.md)
+For information on the format itself, see [the spec](docs/content/docs/spec.md).
 
 # Why? 
 
@@ -51,5 +49,7 @@ and Xattrs.
 # License
 
 The text of the Ponzu spec is given CC-BY-SA 4.0
-The reference implementation is given MIT-0
+The ponzu library in Go is MIT.
+The reference archiver implementation is given MIT-0. 
 
+for more information, see [LICENSE.md](LICENSE.md)
