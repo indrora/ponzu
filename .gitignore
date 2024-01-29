@@ -1,1 +1,6 @@
 bin/**
+docs/public
+docs/resources
+.DS_Store
+**/.hugo_build.lock
+**.afdesign~lock~
