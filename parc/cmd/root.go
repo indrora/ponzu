@@ -19,6 +19,7 @@ var rootCmd = &cobra.Command{
 	Long: `Parc is a reference implementation of the Ponzu Archive format.
 
 	`,
+	DisableAutoGenTag: true,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
@@ -33,8 +34,14 @@ func Execute() {
 	}
 }
 
+// this needs to get good.
+// There's a lot of stuff that isn't really doable with cobra's current doc platform. I want to see some sort
+// of templating available. Somehow.
 func GenDocs() {
-	if err := os.Mkdir("./docs/parc", 0775); err != nil && err != os.ErrExist {
+
+	docdir := "./docs/content/docs/parc"
+
+	if err := os.Mkdir(docdir, 0775); err != nil && err != os.ErrExist {
 		if errors.Is(err, os.ErrExist) {
 			fmt.Println("Docs folder already exists, OK.")
 		} else {
@@ -42,7 +49,8 @@ func GenDocs() {
 			return
 		}
 	}
-	err := doc.GenMarkdownTree(rootCmd, "./docs/parc")
+	fmt.Println("Generating markdown")
+	err := doc.GenMarkdownTree(rootCmd, docdir)
 	if err != nil {
 		fmt.Println("failed to make docs:", err)
 	}
