@@ -1,0 +1,90 @@
+# Note: Template blocks require a 'weight' parameter so they're correctly ordered on the landing page
+
+# Hero
+hero:
+  enable: true
+  weight: 10
+  template: hero
+
+  backgroundImage:
+    path: "images"
+    filename:
+      desktop: "ponzu_bg.webp"
+      mobile: "ponzu_bg.webp"
+
+  badge:
+    text: version 1!
+    color: secondary # primary, secondary, success, danger, warning, info, light, dark
+    pill: true # boolean
+    soft: false # boolean
+
+  # titleLogo:
+  #   path: "images/logos"
+  #   filename: "title_logo.png"
+  #   alt: "Lotus Docs Logo"
+  #   height: 80px
+
+  xtitleLogo:
+    path: "images"
+    filename: "logoplain.webp"
+    alt: "Ponzu logo"
+    height: 128px
+
+  title: "Ponzu"
+  subtitle: |
+    A lightweight, **modern** archive format for linear, append-safe archival with some sweet features.
+
+  image:
+    path: "images" # path to image under configured assets directory. default 'images'
+    filename: "logocropped.webp" # filename of your hero image (including file extension)
+    alt: "Illustration" # Optional but recommended
+    boxShadow: false # default 'false' (excludes .svg images)
+    rounded: false # round the image corners? default 'false' (excludes .svg images)
+
+  ctaButton:
+    icon: question_mark
+    btnText: "Read Why"
+    url: "docs/intro/"
+  cta2Button:
+    icon: quick_reference_all
+    btnText: "Read How"
+    url: "/docs/spec/"
+
+  info: "Fruity Fresh."
+
+featureGrid:
+  enable: true
+  weight: 20
+  template: feature grid
+
+  title: What's Ponzu bring to the table?
+  subtitle: |
+    There are a lot of archive formats out there. What sets Ponzu out from the rest of them? 
+  items:
+    - title: Simple
+      icon: lightbulb
+      description: |
+        The core design pattern behind Ponzu is to keep things as simple as possible
+
+    - title: Future-Proof
+      icon: Acute
+      description: |
+        Spec-compliant Ponzu implementations are forwards and backwards compatible by design.
+
+    - title: Integrity Integrated
+      icon: lock
+      description: Ponzu integrates BLAKE2b hashing for content and metadata, separated from one another.
+
+    - title: UTF-8 By Default
+      icon: translate
+      description: Unicode (UTF-8) by design to handle your filenames from hello.jpg to Кракозябры.pdf
+
+    - title: Batteries Included
+      icon: battery_status_good
+      description: PARC, the reference archive tool, is included. 
+    - title: Extends to fit
+      icon: extension
+      description: Designed to be expanded upon, the spec describes how to add new features.
+
+imageCompare:
+  enable: false

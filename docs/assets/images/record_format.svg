@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
+    width="678px" height="137px" viewBox="-0.5 -0.5 678 137">
+    <g stroke="currentColor">
+
+        <rect x="38" y="28" width="60" height="70" fill="none" />
+        <text x="68" y="67" font-size="12px" text-anchor="middle">Metadata</text>
+        <rect x="98" y="28" width="80" height="70" fill="none" />
+
+        <text x="138" y="60" font-size="12px" text-anchor="middle">
+            Padded to</text>
+        <text x="138" y="70" font-size="12px" text-anchor="middle">nearest 4KiB</text>
+
+        <path d="M 24.4 18 L 171.6 18" stroke-miterlimit="10"
+            pointer-events="stroke" fill="currentColor" />
+        <path d="M 19.1 18 L 26.1 14.5 L 24.4 18 L 26.1 21.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+        <path d="M 176.9 18 L 169.9 21.5 L 171.6 18 L 169.9 14.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+
+        <text x="98" y="15" font-size="11px" text-anchor="middle">4+KiB</text>
+
+        <path d="M 184.4 18 L 651.6 18" stroke-miterlimit="10"
+            pointer-events="stroke" fill="currentColor" />
+        <path d="M 179.1 18 L 186.1 14.5 L 184.4 18 L 186.1 21.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+        <path d="M 656.9 18 L 649.9 21.5 L 651.6 18 L 649.9 14.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+
+        <text x="418" y="15" font-size="11px" text-anchor="middle">block count *
+            4KiB</text>
+        <rect x="538" y="28" width="120" height="70"
+            pointer-events="all" fill="none" />
+        <text x="598" y="67" font-size="12px" text-anchor="middle">Pad
+            to nearest 4KiB</text>
+        <rect x="-7" y="53" width="70" height="20" fill="none"
+            transform="rotate(-90,28,63)" pointer-events="all" />
+
+        <g transform="translate(-0.5 -0.5)rotate(-90 28 63)">
+            <text x="28" y="67" font-size="12px" text-anchor="middle">Header</text>
+        </g>
+
+        <!-- modulo arrow -->
+        <path d="M 504.4 107 L 531.6 107" stroke-miterlimit="10"
+            pointer-events="stroke" fill="currentColor" />
+        <path d="M 499.1 107 L 506.1 103.5 L 504.4 107 L 506.1 110.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+        <path d="M 536.9 107 L 529.9 110.5 L 531.6 107 L 529.9 103.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+
+        <text x="518" y="121" font-size="11px" text-anchor="middle">modulo</text>
+
+        <rect x="178" y="28" width="360" height="70"
+            pointer-events="all" fill="none" />
+
+        <text x="358" y="67" font-size="12px" text-anchor="middle">Body</text>
+
+        <path d="M 44.4 108 L 91.6 108" stroke-miterlimit="10"
+            pointer-events="stroke" fill="currentColor" />
+        <path d="M 39.1 108 L 46.1 104.5 L 44.4 108 L 46.1 111.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+        <path d="M 96.9 108 L 89.9 111.5 L 91.6 108 L 89.9 104.5 Z"
+            stroke-miterlimit="10" pointer-events="all" fill="currentColor" />
+        <text x="68" y="122" font-size="11px" text-anchor="middle">metadata
+            Length</text>
+
+    </g>
+
+</svg>

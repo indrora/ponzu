@@ -1,6 +1,17 @@
-# The Ponzu Spec
+---
+weight: 200
+title: "The Ponzu Spec"
+description: ""
+icon: "article"
+date: "2023-12-19T22:26:17-08:00"
+lastmod: "2023-12-19T22:26:17-08:00"
+draft: false
+toc: true
+---
 
-# The Ponzu archive format, summary
+This document outlines the specification for the Ponzu archive format. 
+
+# Introduction
 
 Ponzu archives are comprised of *records* of 4KiB chunks. 
 
@@ -36,12 +47,20 @@ This preamble is followed by an [RFC 8949 Concise Binary Object Representation (
 
 *A previous version of this spec did not allow the metadata to extend past the 4KiB boundary. now it simply must be padded to the nearest 4KiB boundary.*
 
-<aside>
-💡 Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
 
-</aside>
+![record layout](images/record_format.svg)
 
-## Paths
+Each record looks like this: 
+
+```goat 
+                              |<-- modulo  -->|
+.--------.-------- ~ --.----------------------.-- ~ ----.
+| header | Metadata    |  Body data           | padding |
+'--------'-------- ~ --'----------------------'-- ~ ----'
+.<-- padded to 4KiB --> <--    block_count x 4KiB    -->.
+```
+
+# Paths
 
 Paths (including the archive prefix) in Ponzu archives MUST be forward-relative except for symlink targets.
 A forward-relative path is a path which refers only to a child, not any sibling, cousin, or parent path.
@@ -57,26 +76,25 @@ Examples of invalid forward-relative paths include
 - `./../bob/` (another parent directory access)
 - `../x` (parent directory access)
 
-<aside>
-💡 A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default.
+{{< alert icon="" context="info" >}}
+Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
+{{< /alert >}}
 
-</aside>
+{{< alert icon="" context="info" >}}
+A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default.
+{{< /alert >}}
+{{< alert icon="" context="info" >}}
+A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, “defused” archive which contains no relative paths at all.
+{{< /alert >}}
+{{< alert icon="" context="info" >}}
+A compliant implementation MUST default to writing only non-relative paths.
+{{< /alert >}}
 
-<aside>
-💡 A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, “defused” archive which contains no relative paths at all.
-
-</aside>
-
-<aside>
-💡 A compliant implementation MUST default to writing only non-relative paths.
-
-</aside>
-
-## The most minimal Ponzu archive
+# The most minimal Ponzu archive
 
 The most minimal Ponzu archive consists purely of two control records: a `CONTROL_START` record and a `CONTROL_END` record. 
 
-## Header Flags
+# Header Flags
 
 The following flags are used:
 
@@ -89,7 +107,7 @@ The following flags are used:
 
 Flags outside the mask of `0x00FF` are reserved for implementation specific flags.
 
-## Record Types
+# Record Types
 
 All Ponzu record headers are encoded as CBOR bodies.
 
@@ -109,7 +127,7 @@ The defined record types are
 
 Here, length is specified as the number of data blocks after the record header.
 
-### Archive Control (0)
+## Archive Control (0)
 
 An archive control record is defined by its flags:
 
@@ -125,14 +143,14 @@ The Start of Archive record is used to define the paramters of an archive.
 | prefix  | 2   | 1     | string | Prefix used by all files in this archive           |
 | comment | 3   | 1     | string | Comment, text                                      |
 
-<aside>
+{{< alert icon="" context="info" >}}
 💡 Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slashunless the implementation gives a mechanism to “trust” the archive.
 
-</aside>
+{{< /alert >}}
 
 The End of Archive record is simply a marker that the end of the archive has been achieved. 
 
-### File
+## File
 
 | Name       | Key | Since | type      | Description               |
 | ---------- | --- | ----- | --------- | ------------------------- |
@@ -140,7 +158,7 @@ The End of Archive record is simply a marker that the end of the archive has bee
 | mTime      | 1   | 1     | timestamp | Modified time of the file |
 | osMetadata | 2   | 1     | map       | OS-Specific attributes    |
 
-### Symlinks and Hardlinks
+## Symlinks and Hardlinks
 
 Links are Files with no data section and the following fields:
 
@@ -150,11 +168,11 @@ Links are Files with no data section and the following fields:
 
 Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`.
 
-### Directories
+## Directories
 
 A directory is a File record but with a zero length and zero modulus.
 
-### ZStandard Dictionary
+## ZStandard Dictionary
 
 a ZStandard Dictionary has no specific fields, however the following optional fields
 may be included:
@@ -167,7 +185,7 @@ ZStandard dictionaries *must not* be compressed.
 
 When a Dictionary record is received, the old dictionary (if any) should be discarded.
 
-### OS Special
+## OS Special
 
 For operating systems that support “Special” files (e.g. FIFOs, device nodes, etc),
 this type is used. These files generally do not contain “data”.
@@ -178,7 +196,7 @@ this type is used. These files generally do not contain “data”.
 | mknodMode | -     | 1     | u32    | Mode for mknod              |
 | mknodDev  | -     | 1     | u32    | Dev_t value for mknod       |
 
-### Continuation Block
+## Continuation Block
 
 A Continuation Block is specifically intended for several situations:
 
@@ -187,6 +205,11 @@ A Continuation Block is specifically intended for several situations:
 - Data where it is infeasible to calculate a checksum for the full body in a reasonable amount of time
 
 Continuation blocks have no body.
+
+
+# Details of implementation
+
+This section outlines specific details about the format, such as types of compression, byte order, and a discussion on security.
 
 ## Compression
 
@@ -200,7 +223,7 @@ Two algorithms are defined for compression in Ponzu: ZStandard and Brotli. Compr
 
 Compression is applied only to the data chunks that follow a record header. 
 
-## Host Operating System
+## Host Operating System values
 
 The following operating systems might show up:
 
@@ -213,7 +236,7 @@ The following operating systems might show up:
 
 POSIX and Linux is are supersets of UNIX.
 
-### About the *Universe* value:
+### The `universe` host
 
 The `universe` value is presented as a generic: Archives with the “Universe” machine are treated more or less like large file supporting tar archives with checksums. No file attribute metadata should be inferred or included.
 
@@ -237,7 +260,7 @@ All filenames in Pitch are UTF-8 encoded.
 
 All values shall be Big-Endian (“Network Order”), as defined by RFC8949.
 
-# Security
+## Security
 
 A common vulnerability in Tar and other formats is path traversal attacks. These attacks are often
 the result of something similar to files named `../../../../../etc/sshd/authorized-keys` and the like.

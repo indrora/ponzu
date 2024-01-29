@@ -1,0 +1,55 @@
+# baseURL = 'https://example.org/'
+languageCode = 'en-us'
+title = 'Ponzu Docs'
+theme="lotusdocs"
+
+[module]
+    [[module.imports]]
+        path = "github.com/gohugoio/hugo-mod-bootstrap-scss/v5"
+        disable = false
+
+[markup]
+  defaultMarkdownHandler = 'goldmark'
+  [markup.tableOfContents]
+      endLevel = 3
+      startLevel = 1
+
+[params]
+[params.footer]
+copyright = "A ZaibatsuTel project; 2023-2024 Morgan \"indrora\" Gangwere."
+
+[params.social]
+github = "indrora/ponzu"
+
+[params.docs]
+title = "Ponzu Docs"
+repoURL = "https://github.com/indrora/ponzu/"
+
+darkMode = true
+prism = false
+
+sidebarIcons = true
+titleIcon = true
+
+descriptions=true
+toc = true
+tocMobile = false
+scrollspy = true
+
+[[menu.primary]]
+name = "Docs"
+url = "/docs/"
+identifier = "docs"
+weight = 10
+
+[[menu.primary]]
+name = "Issues"
+url = "https://github.com/indrora/ponzu/issues"
+identifier = "issues"
+weight = 20
+
+[[menu.primary]]
+name = "@indrora"
+url = "https://github.com/indrora"
+identifier = "author"
+weight=30
