@@ -27,6 +27,7 @@ including compression information and similar. `,
 			inspectArchive(filename)
 		}
 	},
+	Args: cobra.MinimumNArgs(1),
 }
 
 func inspectArchive(path string) {

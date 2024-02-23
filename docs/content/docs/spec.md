@@ -38,17 +38,12 @@ struct RECORD_PREAMBLE {
     uint64_t data_len;        // # of blocks to read
     uint16_t data_modulo;          // # of bytes to use in last block
     uint8_t  data_checksum[64];    // BLAKE2b-512 of the data blocks to follow.
-		uint16_t metadata_length;      // length of the metadata to be read
-		uint8_t  metadata_checksum[64];// BLAKE2b-512 checksum of the metadata 
+    uint16_t metadata_length;      // length of the metadata to be read
+    uint8_t  metadata_checksum[64];// BLAKE2b-512 checksum of the metadata 
 }
 ```
 
 This preamble is followed by an [RFC 8949 Concise Binary Object Representation (CBOR)](https://www.rfc-editor.org/rfc/rfc8949) encoded body of metadata, padded to the nearest 4KiB, followed by a series of 4KiB data chunks.
-
-*A previous version of this spec did not allow the metadata to extend past the 4KiB boundary. now it simply must be padded to the nearest 4KiB boundary.*
-
-
-![record layout](images/record_format.svg)
 
 Each record looks like this: 
 
@@ -59,6 +54,21 @@ Each record looks like this:
 '--------'-------- ~ --'----------------------'-- ~ ----'
 .<-- padded to 4KiB --> <--    block_count x 4KiB    -->.
 ```
+
+A complete archive looks like this:
+
+```goat
+.<- one-> <---------------------------- many --------------------------------> <-one ->.
+.--------.---------- ~~ --------.------------- ~~ -----.------------- ~~ -----.--------.
+| start  | header | record body | header | record body | header | record body | end    |
+| record | + meta | data blocks | + meta | data blocks | + meta | data blocks | record |
+.--------'---------- ~~ --------'------------- ~~ -----'------------- ~~ -----'--------.
+```
+
+Archives may be appended to one another. In such a case, each should be considered independent. 
+
+
+
 
 # Paths
 
@@ -76,19 +86,18 @@ Examples of invalid forward-relative paths include
 - `./../bob/` (another parent directory access)
 - `../x` (parent directory access)
 
-{{< alert icon="" context="info" >}}
-Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
-{{< /alert >}}
+{{% alert icon="" context="info" %}}
 
-{{< alert icon="" context="info" >}}
-A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default.
-{{< /alert >}}
-{{< alert icon="" context="info" >}}
-A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, “defused” archive which contains no relative paths at all.
-{{< /alert >}}
-{{< alert icon="" context="info" >}}
-A compliant implementation MUST default to writing only non-relative paths.
-{{< /alert >}}
+- Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
+
+- A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default.
+
+- A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, “defused” archive which contains no relative paths at all.
+
+- A compliant implementation MUST default to writing only non-relative paths.
+
+{{% /alert %}}
+
 
 # The most minimal Ponzu archive
 
@@ -127,7 +136,7 @@ The defined record types are
 
 Here, length is specified as the number of data blocks after the record header.
 
-## Archive Control (0)
+## Archive Control
 
 An archive control record is defined by its flags:
 
@@ -144,8 +153,7 @@ The Start of Archive record is used to define the paramters of an archive.
 | comment | 3   | 1     | string | Comment, text                                      |
 
 {{< alert icon="" context="info" >}}
-💡 Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slashunless the implementation gives a mechanism to “trust” the archive.
-
+ Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slashunless the implementation gives a mechanism to “trust” the archive.
 {{< /alert >}}
 
 The End of Archive record is simply a marker that the end of the archive has been achieved. 
@@ -280,6 +288,10 @@ The preamble contains two checksums:
 
 - The checksum of the metadata portion
 - The checksum of the body content *after* compression
+
+{{< alert >}}
+To be clear: it is not required to decompress the contents of the archive to verify its integrity.
+{{< /alert >}}
 
 If there is no relevant content, the checksum must either be all zeroes (valid, but discouraged) or the null hash. For Blake2b-512, this value should be ``786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce`` in compliant implementations. This value can be computed and verified with the following Go program:
 

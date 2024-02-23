@@ -13,6 +13,8 @@ theme="lotusdocs"
   [markup.tableOfContents]
       endLevel = 3
       startLevel = 1
+  [markup.goldmark.renderer]
+    unsafe = true
 
 [params]
 [params.footer]

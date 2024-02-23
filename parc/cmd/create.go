@@ -202,6 +202,7 @@ Depending on your shell, you may have to enclose globbing patterns in single quo
 `,
 	Run:     createMain,
 	Example: "parc create myarchive.pzarc a/** foo",
+	Args:    cobra.MinimumNArgs(1),
 }
 
 var BuffSize *uint64

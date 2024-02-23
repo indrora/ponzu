@@ -141,6 +141,25 @@ func (reader *Reader) HasBody() bool {
 	}
 }
 
+func (reader *Reader) Validate() (bool, error) {
+	if !reader.HasBody() {
+		return true, nil
+	}
+
+	// Hack: since the checksum is calculated after compression, we don't care.
+	reader.lastPreamble.Compression = format.COMPRESSION_NONE
+
+	err := reader.CopyAll(io.Discard, true)
+	if err == ErrHashMismatch {
+		return false, err
+	}
+	// CopyTo returns io.EOF when
+	if err != io.EOF {
+		return false, err
+	}
+	return true, nil
+}
+
 func (reader *Reader) GetBody(validate bool) ([]byte, error) {
 
 	// if there is no body, we clean up the header and leave.
@@ -155,8 +174,6 @@ func (reader *Reader) GetBody(validate bool) ([]byte, error) {
 	}
 
 	err2 := reader.stream.Realign()
-
-	// noop for now
 	return body.Bytes(), errors.Join(err, err2)
 }
 

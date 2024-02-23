@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
-
 */
 package cmd
 
@@ -13,12 +12,13 @@ import (
 // verifyCmd represents the verify command
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "Verify the integrity of a Pitch archive",
+	Short: "Verify the integrity of a Ponzu archive",
 	Long: `Verify reads each record within an archive and validates any cryptographic
 hashes contained within it.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("verify called")
 	},
+	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {
