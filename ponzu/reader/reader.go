@@ -25,6 +25,7 @@ var (
 	ErrUnknownRecordType = errors.New("unknown record type")
 	ErrHashMismatch      = errors.New("hash does not match")
 	ErrState             = errors.New("tried reading body before you got a header")
+	ErrWalk              = errors.New("walk function returned non-nil error")
 )
 
 const (
@@ -262,5 +263,44 @@ more:
 		goto more
 	}
 
+	return nil
+}
+
+/*
+*
+The WalkFunc controls the walk. Passed to it are the same results from `Reader.Next`, minus any errors.
+
+If it returns a non-nil error, the error is wrapped by a WalkError.
+*/
+type WalkFunc func(*format.Preamble, any) error
+
+// Walk through the
+func (r *Reader) Walk(f WalkFunc) error {
+
+	var err error = nil
+
+	for !errors.Is(err, io.EOF) {
+
+		var preamble *format.Preamble
+		var meta any
+
+		preamble, meta, err = r.Next()
+
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+
+		if !errors.Is(err, io.EOF) {
+			if preamble != nil {
+				if err = f(preamble, meta); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		} else {
+			return nil
+		}
+	}
 	return nil
 }
