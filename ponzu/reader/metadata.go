@@ -7,7 +7,7 @@ import (
 	"github.com/indrora/ponzu/ponzu/format"
 )
 
-func unmarshalMetadata(preamble *format.Preamble, data []byte) any {
+func UnmarshalMetadata(preamble *format.Preamble, data []byte) any {
 
 	switch preamble.Rtype {
 	case format.RECORD_TYPE_CONTROL:
@@ -29,7 +29,7 @@ func unmarshalMetadata(preamble *format.Preamble, data []byte) any {
 	return nil
 }
 
-func unmarshalOrNil[T any](data []byte) *T {
+func UnmarshalOrNil[T any](data []byte) *T {
 	ret := new(T)
 	if err := cbor.Unmarshal(data, ret); err == nil {
 
