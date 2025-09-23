@@ -2,14 +2,16 @@ package writer
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"errors"
 	"io"
-	"math/rand"
+	mrand "math/rand"
 	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
+	"github.com/indrora/ponzu/ponzu/format/metadata"
 	"github.com/indrora/ponzu/ponzu/ioutil"
 )
 
@@ -61,14 +63,22 @@ func TestWriterEncode(t *testing.T) {
 	// Generate some data
 
 	randData := make([]byte, int(1.75*float32(format.BLOCK_SIZE)))
-	rand.Read(randData)
+	crand.Read(randData)
 	fileinfo := format.File{
-		Name:    "foo",
-		ModTime: time.Now(),
+		Name: "foo",
+
+		RecordBase: format.RecordBase{
+
+			Metadata: metadata.RecordMetadata{
+				CommonMetadata: metadata.CommonMetadata{
+					ModifiedTime: metadata.MakePointer(time.Now()),
+				},
+			},
+		},
 	}
 
-	test_rType := uint8(rand.Intn(255))
-	test_rFlags := uint16(rand.Intn(255))
+	test_rType := uint8(mrand.Intn(255))
+	test_rFlags := uint16(mrand.Intn(255))
 
 	err := writer.AppendBytes(format.RecordType(test_rType), format.RecordFlags(test_rFlags), format.COMPRESSION_NONE, fileinfo, randData)
 

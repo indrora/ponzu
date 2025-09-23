@@ -188,12 +188,14 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 	}
 	defer fstream.Close()
 
-	size := uint64(info.Size())
 	meta := format.File{
-		Name:    path,
-		ModTime: info.ModTime(),
-		Metadata: metadata.CommonMetadata{
-			FileSize: &size,
+		Name: path,
+		RecordBase: format.RecordBase{
+			Metadata: metadata.RecordMetadata{
+				CommonMetadata: metadata.CommonMetadata{
+					ModifiedTime: metadata.MakePointer(info.ModTime()),
+				},
+			},
 		},
 	}
 

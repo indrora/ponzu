@@ -43,9 +43,9 @@ type Preamble struct {
 	// Checksum of data blocks
 	DataChecksum [64]byte
 	// Metadata Length
-	MetadataLength uint16
+	InfoLength uint16
 	// checksum of the metadata
-	MetadataChecksum [64]byte
+	InfoChecksum [64]byte
 }
 
 func NewPreamble(
@@ -78,10 +78,10 @@ func NewPreamble(
 		Flags:        flags,
 		DataChecksum: [64]byte(dataChecksum),
 		// computed fields
-		DataLen:          bcount,
-		Modulo:           modulo,
-		MetadataLength:   metadataLen,
-		MetadataChecksum: [64]byte(metadataChecksum),
+		DataLen:      bcount,
+		Modulo:       modulo,
+		InfoLength:   metadataLen,
+		InfoChecksum: [64]byte(metadataChecksum),
 	}
 }
 

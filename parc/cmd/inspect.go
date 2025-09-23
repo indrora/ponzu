@@ -118,8 +118,8 @@ func explainRecord(preamble format.Preamble, meta any) {
 		fmt.Printf("Compression: %d\n", preamble.Compression)
 		fmt.Printf("Length: %d, modulo %d\n", preamble.DataLen, preamble.Modulo)
 		fmt.Printf("Checksum: %x\n", preamble.DataChecksum)
-		fmt.Printf("Metadata Length: %d\n", preamble.MetadataLength)
-		fmt.Printf("Metadata Checksum: %x\n", preamble.MetadataChecksum)
+		fmt.Printf("Metadata Length: %d\n", preamble.InfoLength)
+		fmt.Printf("Metadata Checksum: %x\n", preamble.InfoChecksum)
 		if meta != nil {
 			spew.Dump(meta)
 		}

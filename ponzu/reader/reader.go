@@ -48,7 +48,7 @@ func NewReader(reader io.Reader) *Reader {
 	}
 }
 
-func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
+func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordInfo, err error) {
 
 	if reader.lastPreamble != nil {
 		// we have a previous header!
@@ -59,9 +59,7 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 
 	}
 
-	var err error
-
-	mPreamble := &format.Preamble{}
+	mPreamble = &format.Preamble{}
 
 	if err = binary.Read(reader.stream, binary.BigEndian, mPreamble); err != nil {
 		return nil, nil, errors.Join(err, ErrExpectedHeader)
@@ -76,13 +74,13 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 
 	// Parse from the preamble the metadata.
 	cborData := new(bytes.Buffer)
-	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.MetadataLength))
+	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.InfoLength))
 
 	// Realign the reader to the start of the data (or next record)
 	reader.stream.Realign()
 
-	if n != int64(mPreamble.MetadataLength) {
-		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of metadata", err, mPreamble.MetadataLength, n)
+	if n != int64(mPreamble.InfoLength) {
+		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of metadata", err, mPreamble.InfoLength, n)
 	} else if err != nil {
 		return mPreamble, nil, err
 	}
@@ -90,14 +88,12 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	cborDataBytes := cborData.Bytes()
 	metaHashCheck := blake2b.Sum512(cborDataBytes)
 
-	if !bytes.Equal(metaHashCheck[:], mPreamble.MetadataChecksum[:]) {
-		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.MetadataChecksum, metaHashCheck)
+	if !bytes.Equal(metaHashCheck[:], mPreamble.InfoChecksum[:]) {
+		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.InfoChecksum, metaHashCheck)
 	}
 
-	var metadata any = nil
-
 	if len(cborDataBytes) > 0 {
-		metadata = unmarshalMetadata(mPreamble, cborDataBytes)
+		mInfo, err = UnmarshalRecordInfo(mPreamble, cborDataBytes)
 	}
 
 	reader.lastPreamble = mPreamble
@@ -110,16 +106,13 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 	case format.RECORD_TYPE_SYMLINK:
 	case format.RECORD_TYPE_OS_SPECIAL:
 		if mPreamble.DataLen != 0 {
-			return mPreamble, metadata, fmt.Errorf("%w: expected 0, got %v", ErrUnexpectedData, mPreamble.DataLen)
+			return mPreamble, mInfo, fmt.Errorf("%w: expected 0, got %v", ErrUnexpectedData, mPreamble.DataLen)
 		}
 	case format.RECORD_TYPE_ZDICTIONARY:
 		// Special case: we are going to consume the zstd dictionary and then return the next frame afterwards
-		spew.Dump(mPreamble)
 		buff := new(bytes.Buffer)
-		fmt.Println("calling CopyAll")
 		err := reader.CopyAll(buff, true)
 		if err != nil && err != io.EOF {
-			fmt.Println("Failed to copy all data for zstd dictionary:", err)
 			return nil, nil, err
 		} else {
 			reader.zstdDict = buff.Bytes()
@@ -127,10 +120,10 @@ func (reader *Reader) Next() (*format.Preamble, interface{}, error) {
 		}
 
 	default:
-
+		// No special handling.
 	}
 
-	return mPreamble, metadata, nil
+	return mPreamble, mInfo, nil
 
 }
 
@@ -154,7 +147,7 @@ func (reader *Reader) Validate() (bool, error) {
 	if err == ErrHashMismatch {
 		return false, err
 	}
-	// CopyTo returns io.EOF when
+	// CopyTo returns io.EOF when finished.
 	if err != io.EOF {
 		return false, err
 	}
@@ -238,7 +231,6 @@ func (reader *Reader) CopyTo(writer io.Writer, validate bool) error {
 }
 
 func (reader *Reader) CopyAll(writer io.Writer, validate bool) error {
-	fmt.Println("xxx: copyAll")
 more:
 
 	if reader.lastPreamble == nil {
@@ -248,7 +240,6 @@ more:
 	continues := reader.lastPreamble.Flags&format.RECORD_FLAG_CONTINUES == format.RECORD_FLAG_CONTINUES
 
 	err := reader.CopyTo(writer, validate)
-	fmt.Println("xxx: copy err: ", err)
 	if err != nil && err != io.EOF {
 		return err
 	}
@@ -263,44 +254,5 @@ more:
 		goto more
 	}
 
-	return nil
-}
-
-/*
-*
-The WalkFunc controls the walk. Passed to it are the same results from `Reader.Next`, minus any errors.
-
-If it returns a non-nil error, the error is wrapped by a WalkError.
-*/
-type WalkFunc func(*format.Preamble, any) error
-
-// Walk through the
-func (r *Reader) Walk(f WalkFunc) error {
-
-	var err error = nil
-
-	for !errors.Is(err, io.EOF) {
-
-		var preamble *format.Preamble
-		var meta any
-
-		preamble, meta, err = r.Next()
-
-		if err != nil && !errors.Is(err, io.EOF) {
-			return err
-		}
-
-		if !errors.Is(err, io.EOF) {
-			if preamble != nil {
-				if err = f(preamble, meta); err != nil {
-					return err
-				}
-			} else {
-				return err
-			}
-		} else {
-			return nil
-		}
-	}
 	return nil
 }

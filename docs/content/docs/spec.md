@@ -4,7 +4,7 @@ title: "The Ponzu Spec"
 description: ""
 icon: "article"
 date: "2023-12-19T22:26:17-08:00"
-lastmod: "2023-12-19T22:26:17-08:00"
+lastmod: "2025-09-21T01:14:00-08:00"
 draft: false
 toc: true
 ---
@@ -23,23 +23,23 @@ Each Ponzu record is headed by a Preamble containing:
 - A two-byte (uint16_t) flag field.
 - A uint64_t defining the number of data segments (4K blocks) to follow
 - A uint16_t defining the number of bytes used in the final data block
-- A 64-byte (512-bit) BLAKE2b-512 checksum of the metadata section
-- A uint16_t defining the length of the metadata section
+- A 64-byte (512-bit) BLAKE2b-512 checksum of the  record info section
+- A uint16_t defining the length of the record info section
 - A 64-byte (512 bits) BLAKE2b-512 checksum of content
 
 A C implementation of the standard might use something like this:
 
 ```c
 struct RECORD_PREAMBLE {
-    uint8_t  magic[6];        // "PONZU\0"
-    uint8_t  record_type;     // 0 = SOA, 1 = file, etc.
-    uint8_t  compression;     // Type of compression
-    uint16_t flags;           // Flag Set
-    uint64_t data_len;        // # of blocks to read
-    uint16_t data_modulo;          // # of bytes to use in last block
-    uint8_t  data_checksum[64];    // BLAKE2b-512 of the data blocks to follow.
-    uint16_t metadata_length;      // length of the metadata to be read
-    uint8_t  metadata_checksum[64];// BLAKE2b-512 checksum of the metadata 
+    uint8_t  magic[6];           // "PONZU\0"
+    uint8_t  record_type;        // 0 = SOA, 1 = file, etc.
+    uint8_t  compression;        // Type of compression
+    uint16_t flags;              // Flag Set
+    uint64_t data_len;           // # of blocks to read
+    uint16_t data_modulo;        // # of bytes to use in last block
+    uint8_t  data_checksum[64];  // BLAKE2b-512 of the data blocks to follow.
+    uint16_t info_length;        // length of the metadata to be read
+    uint8_t  info_checksum[64];  // BLAKE2b-512 checksum of the metadata 
 }
 ```
 
@@ -50,7 +50,7 @@ Each record looks like this:
 ```goat 
                               |<-- modulo  -->|
 .--------.-------- ~ --.----------------------.-- ~ ----.
-| header | Metadata    |  Body data           | padding |
+| header | Information |  Body data           | padding |
 '--------'-------- ~ --'----------------------'-- ~ ----'
 .<-- padded to 4KiB --> <--    block_count x 4KiB    -->.
 ```
@@ -60,7 +60,7 @@ A complete archive looks like this:
 ```goat
 .<- one-> <---------------------------- many --------------------------------> <-one ->.
 .--------.---------- ~~ --------.------------- ~~ -----.------------- ~~ -----.--------.
-| start  | header | record body | header | record body | header | record body | end    |
+| start  | Info   | record body | info   | record body | info   | record body | end    |
 | record | + meta | data blocks | + meta | data blocks | + meta | data blocks | record |
 .--------'---------- ~~ --------'------------- ~~ -----'------------- ~~ -----'--------.
 ```
@@ -72,32 +72,8 @@ Archives may be appended to one another. In such a case, each should be consider
 
 # Paths
 
-Paths (including the archive prefix) in Ponzu archives MUST be forward-relative except for symlink targets.
-A forward-relative path is a path which refers only to a child, not any sibling, cousin, or parent path.
-Examples of valid forward-relative paths include:
-
-- `coconuts/bunches/lovely.jpg` (a perfectly reasonable path)
-- `pools/../cheeses/Wensleydale.tiff` (does not go below the “current” path)
-- `heads/talking/` (regular path to a directory)
-
-Examples of invalid forward-relative paths include
-
-- `kittens/../../dogs/puppies/newfoundland.jpg` (Creates a sibling)
-- `./../bob/` (another parent directory access)
-- `../x` (parent directory access)
-
-{{% alert icon="" context="info" %}}
-
-- Compliant implementations MUST NOT allow the creation of files below the level of the prefix.
-
-- A compliant implementation MAY provide a mechanism to ignore these rules, but it MUST be off by default.
-
-- A compliant implementation MAY provide a mechanism to resolve paths within the archive and output a new, “defused” archive which contains no relative paths at all.
-
-- A compliant implementation MUST default to writing only non-relative paths.
-
-{{% /alert %}}
-
+Paths (including the archive prefix) in Ponzu archives MUST be fully resolved (containing no `..` portions.) A leading `/` is always to be interpreted as
+`./` except for symlinks, which must be a relative or absolute path but must still be fully resolved
 
 # The most minimal Ponzu archive
 
@@ -118,7 +94,7 @@ Flags outside the mask of `0x00FF` are reserved for implementation specific flag
 
 # Record Types
 
-All Ponzu record headers are encoded as CBOR bodies.
+All Ponzu record information headers are encoded as CBOR bodies.
 
 The defined record types are
 
@@ -145,49 +121,57 @@ An archive control record is defined by its flags:
 
 The Start of Archive record is used to define the paramters of an archive.
 
-| Name    | Key | since | type   | Description                                        |
-| ------- | --- | ----- | ------ | -------------------------------------------------- |
-| version | 0   | 1     | Uint8  | Version of the Ponzu spec this archive conforms to |
-| host    | 1   | 1     | string | Host OS type that this archive was created on      |
-| prefix  | 2   | 1     | string | Prefix used by all files in this archive           |
-| comment | 3   | 1     | string | Comment, text                                      |
+| Name    | since | type   | Description                                        |
+| ------- | ----- | ------ | -------------------------------------------------- |
+| version | 1     | Uint8  | Version of the Ponzu spec this archive conforms to |
+| host    | 1     | string | Host OS type that this archive was created on      |
+| prefix  | 1     | string | Prefix used by all files in this archive           |
+| comment | 1     | string | Comment, text                                      |
 
 {{< alert icon="" context="info" >}}
- Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slashunless the implementation gives a mechanism to “trust” the archive.
+ Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slash unless the implementation gives a mechanism to “trust” the archive.
 {{< /alert >}}
 
 The End of Archive record is simply a marker that the end of the archive has been achieved. 
 
+## Common
+
+
+| Name | Since | Type | Description|
+| osMetadata | 1     | map    | OS-Specific attributes |
+
 ## File
 
-| Name       | Key | Since | type      | Description               |
-| ---------- | --- | ----- | --------- | ------------------------- |
-| name       | 0   | 1     | string    | filename                  |
-| mTime      | 1   | 1     | timestamp | Modified time of the file |
-| osMetadata | 2   | 1     | map       | OS-Specific attributes    |
+| Name | Since | type   | Description |
+| ---- | ----- | ------ | ----------- |
+| name | 1     | string | filename    |
 
 ## Symlinks and Hardlinks
 
 Links are Files with no data section and the following fields:
 
-| Name       | Key | Since | type   | Description |
-| ---------- | --- | ----- | ------ | ----------- |
-| linkTarget | -1  | 1     | string | Link target |
+| Name   | Since | type   | Description |
+| ------ | ----- | ------ | ----------- |
+| name   | 1     | string | filename    |
+| target | 1     | string | Link target |
 
 Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`.
 
 ## Directories
 
-A directory is a File record but with a zero length and zero modulus.
+| Name | Since | type   | Description    |
+| ---- | ----- | ------ | -------------- |
+| name | 1     | string | directory name |
+
 
 ## ZStandard Dictionary
 
 a ZStandard Dictionary has no specific fields, however the following optional fields
 may be included:
 
-| Name    | Key | Since | type   | Description                                                 |
-| ------- | --- | ----- | ------ | ----------------------------------------------------------- |
-| version | 0   | 1     | string | Version of ZStandard that created this dictionary, if known |
+| Name    | Since | type   | Description                                                 |
+| ------- | ----- | ------ | ----------------------------------------------------------- |
+| version | 1     | string | Version of ZStandard that created this dictionary, if known |
 
 ZStandard dictionaries *must not* be compressed.
 
@@ -198,11 +182,12 @@ When a Dictionary record is received, the old dictionary (if any) should be disc
 For operating systems that support “Special” files (e.g. FIFOs, device nodes, etc),
 this type is used. These files generally do not contain “data”.
 
-| Name      | index | Since | type   | Description                 |
-| --------- | ----- | ----- | ------ | --------------------------- |
-| type      | -1    | 1     | string | only “mknod” valid for now. |
-| mknodMode | -     | 1     | u32    | Mode for mknod              |
-| mknodDev  | -     | 1     | u32    | Dev_t value for mknod       |
+| Name      | Since | type   | Description                 |
+| --------- | ----- | ------ | --------------------------- |
+| name      | 1     | string | filename                    |
+| type      | 1     | string | only “mknod” valid for now. |
+| mknodMode | 1     | u32    | Mode for mknod              |
+| mknodDev  | 1     | u32    | Dev_t value for mknod       |
 
 ## Continuation Block
 
@@ -286,14 +271,14 @@ All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](htt
 
 The preamble contains two checksums:
 
-- The checksum of the metadata portion
+- The checksum of the record information portion
 - The checksum of the body content *after* compression
 
 {{< alert >}}
 To be clear: it is not required to decompress the contents of the archive to verify its integrity.
 {{< /alert >}}
 
-If there is no relevant content, the checksum must either be all zeroes (valid, but discouraged) or the null hash. For Blake2b-512, this value should be ``786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce`` in compliant implementations. This value can be computed and verified with the following Go program:
+If there is no relevant content, the checksum must either be all zeroes (valid, but discouraged) or the null hash. For Blake2b-512, this value should be `786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce` in compliant implementations. This value can be computed and verified with the following Go program:
 
 ```go
 package main
@@ -316,57 +301,69 @@ This section describes the metadata mapping used for each operating system.
 
 All metadata entries are optional.
 
+Metadata is comprised of a series of string keys and strictly typed values. Each key is prefixed with the host that it comes
+from, with all common metadata being prefixed with "universe."
+
+A file may have the metadata from multiple hosts: If a file has a valid WinNT SDDL and a valid UNIX xattr declaration, both
+are valid to have in a file. 
+
 ## Common
 
-| Key         | index | type      | Since | Description                                                            |
-| ----------- | ----- | --------- | ----- | ---------------------------------------------------------------------- |
-| createdTime | -     | timestamp | 1     | the creation time of the file                                          |
-| fileSize    | -     | uint64    | 1     | The final size on disk of the file, after reassembly and decompression |
-| mimetype    | -     | string    | 1     | If applicable, the MIME filetype                                       |
-| comment     | -     | string    | 1     | A freeform string comment                                              |
+| Key                     | type      | Since | Description                                                            |
+| ----------------------- | --------- | ----- | ---------------------------------------------------------------------- |
+| `universe.createdTime ` | timestamp | 1     | the creation time of the file                                          |
+| `universe.modifiedTime` | timestamp | 1     | The modification time of the file                                      |
+| `universe.fileSize    ` | uint64    | 1     | The final size on disk of the file, after reassembly and decompression |
+| `universe.mimetype    ` | string    | 1     | If applicable, the MIME filetype                                       |
+| `universe.comment     ` | string    | 1     | A freeform string comment                                              |
 
 ## UNIX
 
 This encompasses most UNIX-like operating systems.
 
-| Name  | index | Since | type                    | Description                         |
-| ----- | ----- | ----- | ----------------------- | ----------------------------------- |
-| owner | 0     | 1     | string                  | Owning user                         |
-| group | 1     | 1     | string                  | Owning Group                        |
-| mode  | 2     | 1     | uint16                  | File permissions (chmod compatible) |
-| attr  | -     | 1     | array of string         | Attributes/flags                    |
-| xattr | -     | 1     | map of string to binary | Extended Attributes                 |
+| Name         | Since | type                    | Description                         |
+| ------------ | ----- | ----------------------- | ----------------------------------- |
+| `unix.owner` | 1     | string                  | Owning user                         |
+| `unix.group` | 1     | string                  | Owning Group                        |
+| `unix.mode ` | 1     | uint16                  | File permissions (chmod compatible) |
+| `unix.attr ` | 1     | array of string         | Attributes/flags                    |
+| `unix.xattr` | 1     | map of string to binary | Extended Attributes                 |
 
 ## Linux
 
-The Linux metadata contains the numbered UNIX metadata as well as the following:
+The Linux metadata contains the UNIX metadata as well as the following:
 
-| Name            | index | Since | type   | Description            |
-| --------------- | ----- | ----- | ------ | ---------------------- |
-| selinux_label   | -     | 1     | string | SELinux label          |
-| selinux_context | -     | 1     | string | SELinux Context        |
-| caps            | -     | 1     | uint64 | Linux capability flags |
+| Name                    | Since | type   | Description            |
+| ----------------------- | ----- | ------ | ---------------------- |
+| `linux.selinux_label  ` | 1     | string | SELinux label          |
+| `linux.selinux_context` | 1     | string | SELinux Context        |
+| `linux.caps           ` | 1     | uint64 | Linux capability flags |
 
 ## POSIX
 
 The POSIX environment contains the numbered UNIX metadata as well as
 
-| Name | index | since | type            | Description                                   |
-| ---- | ----- | ----- | --------------- | --------------------------------------------- |
-| acls | -     | 1     | Array of string | POSIX ACLs in the format described by setfacl |
+| Name         | since | type            | Description                                   |
+| ------------ | ----- | --------------- | --------------------------------------------- |
+| `posix.acls` | 1     | Array of string | POSIX ACLs in the format described by setfacl |
 
 The POSIX ACLs are here for historical completeness.
 
 ## WinNT
 
-| Name       | index | type   | Description                  |
-| ---------- | ----- | ------ | ---------------------------- |
-| sddlString | 0     | string | SDDL ACL for the file        |
-| attributes | 1     | uint16 | Windows NTFS attribute flags |
+| Name               | since | type   | Description                  |
+| ------------------ | ----- | ------ | ---------------------------- |
+| `winnt.sddlString` | 1     | string | SDDL ACL for the file        |
+| `winnt.attributes` | 1     | uint16 | Windows NTFS attribute flags |
 
 ## MacOS/Darwin
 
 The MacOS/Darwin metadata is inherited from the UNIX/BSD metadata.
+
+| Name               | since | type   | description    |
+| ------------------ | ----- | ------ | -------------- |
+| `darwin.bsd_flags` | 1     | uint64 | see chflags(2) |
+
 
 # Appendix: License
 
