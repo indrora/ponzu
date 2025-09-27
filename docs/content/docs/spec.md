@@ -72,8 +72,8 @@ Archives may be appended to one another. In such a case, each should be consider
 
 # Paths
 
-Paths (including the archive prefix) in Ponzu archives MUST be fully resolved (containing no `..` portions.) A leading `/` is always to be interpreted as
-`./` except for symlinks, which must be a relative or absolute path but must still be fully resolved
+Paths (including the archive prefix) in Ponzu archives MUST be fully resolved (containing no
+`..` portions.) A leading `/` is always to be interpreted as `./` except for symbolic and hard links.  
 
 # The most minimal Ponzu archive
 
@@ -137,8 +137,9 @@ The End of Archive record is simply a marker that the end of the archive has bee
 ## Common
 
 
-| Name | Since | Type | Description|
-| osMetadata | 1     | map    | OS-Specific attributes |
+| Name       | Since | Type | Description            |
+| ---------- | ----- | ---- | ---------------------- |
+| osMetadata | 1     | map  | OS-Specific attributes |
 
 ## File
 
@@ -263,7 +264,7 @@ This may concern those who maintain package management around tar: Traditionally
 
 All Ponzu archives are given a prefix. This prefix could be interpeted as a suggestion – e.g. an archive with the prefix `libgizmo-1.33.7` may be overridden with simply `libgizmo` or even ignored should the implementation decide to do so. Should an implementation wish, it could override the prefix with no or little ill effect.
 
-Not described here is verifying archive authenticity or provenance. A compliant implementation may add additional records for such things as digital signatures. Additional, implementation-dependent keys may be added to the Start of Archive record to add a digital signature for the complete archive, for instance. This is not covered in version 1 of this specification.
+Not described here is verifying archive authenticity or provenance. A compliant implementation may add additional records for such things as digital signatures. As an example, additional, implementation-dependent keys may be added to the Start of Archive record to add a digital signature for the complete archive. This is not covered in version 1 of this specification.
 
 ## Checksums
 
