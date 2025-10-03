@@ -63,7 +63,7 @@ type WinNTMetadata struct {
 
 // MacOS/Darwin metadata: Just UNIX, for now.
 type DarwinMetadata struct {
-	BsdFlags *uint64 `cbor:darwin.bsd_flags,omitempty`
+	BsdFlags *uint64 `cbor:"darwin.bsd_flags,omitempty"`
 }
 
 type RecordMetadata struct {
