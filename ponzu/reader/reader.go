@@ -50,25 +50,44 @@ func NewReader(reader io.Reader) *Reader {
 
 func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordInfo, err error) {
 
-	if reader.lastPreamble != nil {
-		// we have a previous header!
-		// exhaust any data
-		reader.CopyTo(io.Discard, false)
-		reader.stream.Realign()
-		reader.lastPreamble = nil
-
-	}
+	fmt.Println(" --- Enter Next() --- ")
+	reader.stream.Realign()
 
 	mPreamble = &format.Preamble{}
+	xPreamble := format.Preamble{}
 
-	if err = binary.Read(reader.stream, binary.BigEndian, mPreamble); err != nil {
+	preamblebytes := make([]byte, binary.Size(xPreamble))
+	i, e := reader.stream.Read(preamblebytes)
+	spew.Dump(preamblebytes)
+
+	if e != nil {
+		if e == io.EOF {
+			return nil, nil, io.EOF
+		}
+		panic(errors.New("Bang!!"))
+		return nil, nil, ErrExpectedHeader
+	}
+
+	if i != binary.Size(xPreamble) {
+		panic(fmt.Errorf("%w: Expected to read %d, got %d", e, binary.Size(xPreamble), i))
+		return nil, nil, ErrExpectedHeader
+	}
+
+	breader := bytes.NewReader(preamblebytes)
+
+	if err = binary.Read(breader, binary.BigEndian, &xPreamble); err != nil {
+		panic(err)
 		return nil, nil, errors.Join(err, ErrExpectedHeader)
 	}
 
+	*mPreamble = xPreamble
 	// verify preamble magic
 
 	if !bytes.Equal(mPreamble.Magic[:], format.PREAMBLE_BYTES[:]) {
-		spew.Dump(mPreamble)
+		spew.Dump(xPreamble)
+		fmt.Printf("expected %x, got %x\n\n\n", format.PREAMBLE_BYTES, mPreamble.Magic)
+
+		//panic(ErrExpectedHeader)
 		return nil, nil, ErrExpectedHeader
 	}
 
@@ -76,8 +95,9 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 	cborData := new(bytes.Buffer)
 	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.InfoLength))
 
-	// Realign the reader to the start of the data (or next record)
-	reader.stream.Realign()
+	if err == io.EOF {
+		return nil, nil, io.EOF
+	}
 
 	// CHeck that we read the right amount of information.
 	if n != int64(mPreamble.InfoLength) {
@@ -99,6 +119,9 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 			return mPreamble, nil, fmt.Errorf("failed to unmarshal record information: %w", err)
 		}
 	}
+
+	// Realign the reader to the start of the data (or next record)
+	reader.stream.Realign()
 
 	reader.lastPreamble = mPreamble
 
@@ -128,6 +151,7 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 		// No special handling.
 	}
 
+	fmt.Println("--- exited Next ---")
 	return mPreamble, mInfo, nil
 
 }

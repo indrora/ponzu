@@ -53,7 +53,7 @@ func run(cmd *cobra.Command, args []string) {
 			if p.Rtype != format.RECORD_TYPE_CONTROL && p.Flags != format.RECORD_FLAG_CONTROL_START {
 				return ErrMissingHeader
 			} else {
-				cSOA = &(m.StartOfArchive)
+				cSOA = m.StartOfArchive
 				// patch up the prefix if we have a change
 				if forcedPrefix != nil {
 					cmd.Println("Overriding prefix with " + *forcedPrefix)

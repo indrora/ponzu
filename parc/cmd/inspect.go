@@ -4,6 +4,7 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -39,10 +40,15 @@ func inspectArchive(cmd *cobra.Command, path string) {
 	r := reader.NewReader(fh)
 
 	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
-		cmd.Printf("Record\n\ttype:%v compression:%v flags:%v\n", p.Rtype, p.Compression, p.Flags)
-		cmd.Printf("Size: info:%v bytes, data: %v bytes (padding: %v bytes) \n", p.InfoLength, p.DataLen, p.Modulo)
-		cmd.Printf("Checksums:\n\tinfo:%v\n\tdata:%v\n", p.InfoChecksum, p.DataChecksum)
-		spew.Fdump(cmd.OutOrStdout(), m)
+		fmt.Println("--- enter walkFun ---")
+		spew.Dump(p)
+		switch p.Rtype {
+		case format.RECORD_TYPE_CONTROL:
+			if p.Flags == format.RECORD_FLAG_CONTROL_START {
+				spew.Dump(m.StartOfArchive)
+			}
+		}
+		fmt.Println("--- exit walkFun ---")
 		return nil
 	}
 

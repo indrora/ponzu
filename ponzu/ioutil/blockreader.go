@@ -3,6 +3,7 @@ package ioutil
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -40,8 +41,9 @@ func (br *BlockReader) Realign() error {
 	if br.realignBytes > 0 {
 		// Read out the remaining bytes
 
-		buf := make([]byte, br.ChunkSize-br.realignBytes)
-		_, err := io.ReadFull(br.reader, buf)
+		discardable := br.ChunkSize - br.realignBytes
+		fmt.Printf("Discarding %d bytes \n", discardable)
+		_, err := io.CopyN(io.Discard, br.reader, int64(discardable))
 		if err != nil && err != io.EOF {
 			return err
 		}

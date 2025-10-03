@@ -76,14 +76,14 @@ type OSSpecial struct {
 type UnknownType map[string]any
 
 type RecordInfo struct {
-	StartOfArchive
-	File
-	Symlink
-	Hardlink
-	Directory
-	ZstdDictionary
-	OSSpecial
+	*StartOfArchive
+	*File
+	*Symlink
+	*Hardlink
+	*Directory
+	*ZstdDictionary
+	*OSSpecial
 
 	// fallback
-	UnknownType
+	*UnknownType
 }
