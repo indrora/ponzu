@@ -11,7 +11,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/ponzu/format"
-	"github.com/indrora/ponzu/ponzu/format/metadata"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
 )
@@ -45,7 +44,7 @@ func inspectArchive(path string) {
 	for !errors.Is(err, io.EOF) {
 
 		var preamble *format.Preamble
-		var meta any
+		var meta *format.RecordInfo
 
 		preamble, meta, err = archiveReader.Next()
 
@@ -63,13 +62,11 @@ func inspectArchive(path string) {
 					fmt.Println("Metadata:")
 					spew.Dump(meta)
 				} else {
-					explainRecord(*preamble, meta)
+					explainRecord(*preamble, *meta)
 				}
 			} else {
 				fmt.Printf("Preamble was nil... Something went wrong")
-
 				return
-
 			}
 		} else {
 			fmt.Println("No more records.")
@@ -77,53 +74,30 @@ func inspectArchive(path string) {
 	}
 }
 
-func explainRecord(preamble format.Preamble, meta any) {
+func explainRecord(preamble format.Preamble, recordInfo format.RecordInfo) {
 
 	switch preamble.Rtype {
 	case format.RECORD_TYPE_CONTROL:
 		fmt.Print("Control record: ")
 		if preamble.Flags == format.RECORD_FLAG_CONTROL_START {
-			fmt.Println("Begin archive.", "ponzu version", meta.(*format.StartOfArchive).Version)
+			fmt.Println("Begin archive.", "ponzu version", recordInfo.StartOfArchive.Version)
 		} else if preamble.Flags == format.RECORD_FLAG_CONTROL_END {
 			fmt.Println("End of archive marker")
 		} else {
 			fmt.Println("Unknown control record.")
 		}
-	case format.RECORD_TYPE_DIRECTORY:
-		fmt.Println("Directory: ", meta.(*format.Directory).Name)
-	case format.RECORD_TYPE_FILE:
-		fmeta := meta.(*format.File)
-		mmeta, ok := metadata.TransmogrifyCbor[metadata.CommonMetadata](fmeta.Metadata.(map[any]any))
-		fmt.Println("File ", fmeta.Name, "modtime ", fmeta.ModTime)
-
-		if verbose {
-
-			if ok {
-				if mmeta.FileSize != nil {
-					fmt.Printf("Size %d bytes\n", *mmeta.FileSize)
-				}
-				if mmeta.MimeType != nil {
-					fmt.Printf("Mimetype %s\n", *mmeta.MimeType)
-				}
-			}
-			fmt.Printf("Body checksum: %x\n", preamble.DataChecksum)
-		}
-
 	case format.RECORD_TYPE_CONTINUE:
 		fmt.Println("[Previous record continues]")
 	default:
-		fmt.Printf("======Record ======\n")
-		fmt.Printf("Type: %d\n", preamble.Rtype)
-		fmt.Printf("Flags: %d\n", preamble.Flags)
-		fmt.Printf("Compression: %d\n", preamble.Compression)
-		fmt.Printf("Length: %d, modulo %d\n", preamble.DataLen, preamble.Modulo)
-		fmt.Printf("Checksum: %x\n", preamble.DataChecksum)
-		fmt.Printf("Metadata Length: %d\n", preamble.InfoLength)
-		fmt.Printf("Metadata Checksum: %x\n", preamble.InfoChecksum)
-		if meta != nil {
-			spew.Dump(meta)
-		}
-		fmt.Println("======= Record ===== ")
+		fmt.Printf("Record (type=%v, flags=%v, len=%v mod=%v infolen=%v, compression=%v)\n",
+			preamble.Rtype,
+			preamble.Flags,
+			preamble.DataLen,
+			preamble.Modulo,
+			preamble.InfoLength,
+			preamble.Compression)
+		fmt.Printf("Hashes:\n\tinfo: %x\n\tbody: %x\n", preamble.InfoChecksum, preamble.DataChecksum)
+		spew.Dump(recordInfo)
 	}
 
 }
