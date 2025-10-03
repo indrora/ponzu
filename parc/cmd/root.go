@@ -51,6 +51,7 @@ func GenDocs() {
 	}
 	fmt.Println("Generating markdown")
 	err := doc.GenMarkdownTree(rootCmd, docdir)
+
 	if err != nil {
 		fmt.Println("failed to make docs:", err)
 	}
