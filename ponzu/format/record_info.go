@@ -4,8 +4,6 @@ import (
 	"github.com/indrora/ponzu/ponzu/format/metadata"
 )
 
-// There are a handful of record types. These are CBOR types.
-
 /*
 *
 Record base that all other things are based on.
@@ -21,48 +19,60 @@ type RecordBase struct {
 // All archives start with a Start of Archive header
 type StartOfArchive struct {
 	RecordBase
-	// Version of the archive
-	Version uint8 `cbor:"version"`
-	// Host OS the archive was made on
-	Host string `cbor:"host"`
-	// Prefix to write all files to
-	Prefix string `cbor:"prefix"`
-	// Comment for the archive (open text field)
-	Comment string `cbor:"comment"`
+
+	Version *int    `cbor:"version,omitempty"` // Version of the archive
+	Host    *string `cbor:"host,omitempty"`    // Host OS the archive was made on
+	Prefix  *string `cbor:"prefix,omitempty"`  // Prefix to write all files to
+	Comment *string `cbor:"comment,omitempty"` // Comment for the archive (open text field)
+
 }
 
+// File record: Records its name, size on disk. All other things are encoded in the metadata block.
 type File struct {
 	RecordBase
-	Name string `cbor:"name"`
+	Name *string `cbor:"name"`
 }
 
+// Shell type for a link. Hardlinks and Softlinks are otherwise identical, but for syntactic purposes in Go, this is easier.
 type Link struct {
-	Name   string `cbor:"name"`
-	Target string `cbor:"target"`
+	Name   *string `cbor:"name,omitempty"`
+	Target *string `cbor:"target,omitempty"`
 }
 
+// Symbolic link
 type Symlink struct {
 	RecordBase
 	Link
 }
+
+// Hard link
 type Hardlink struct {
 	RecordBase
 	Link
 }
+
+// A directory is like a file, but it doesn't have a dimensionality to it.
 type Directory struct {
 	RecordBase
-	Name string `cbor:"name"`
+	Name *string `cbor:"name,omitempty"`
 }
+
+// ZStandard dictionaries are weird in that they are interpreted transparently
+// and are not usually processed by end applications.
 type ZstdDictionary struct{ RecordBase }
+
+// OS Special devices. They might have dimensionality but that should get added later
+// for things like block devices.
 
 type OSSpecial struct {
 	RecordBase
-	Name        string `cbor:"name"`
-	SpecialType string `cbor:"type"`
-	Mode        uint32 `cbor:"mknodMode"`
-	Device      uint32 `cbor:"mknodDev"`
+	Name        *string `cbor:"name,omitempty"`
+	SpecialType *string `cbor:"type,omitempty"`
+	Mode        *uint32 `cbor:"mknodMode,omitempty"`
+	Device      *uint32 `cbor:"mknodDev,omitempty"`
 }
 
+// A fallback type that turns into an arbitrary map.
 type UnknownType map[string]any
 
 type RecordInfo struct {

@@ -10,7 +10,7 @@ import (
 func (archive *ArchiveWriter) AppendDirectory(path string, info fs.FileInfo) error {
 
 	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.COMPRESSION_NONE, format.Directory{
-		Name: path,
+		Name: metadata.MakePointer(path),
 
 		RecordBase: format.RecordBase{
 			Metadata: metadata.RecordMetadata{
@@ -27,8 +27,8 @@ func (archive *ArchiveWriter) AppendDirectory(path string, info fs.FileInfo) err
 func (archive *ArchiveWriter) AppendSymlink(path string, destination string, info fs.FileInfo) error {
 	err := archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.COMPRESSION_NONE, format.Symlink{
 		Link: format.Link{
-			Name:   path,
-			Target: destination,
+			Name:   metadata.MakePointer(path),
+			Target: metadata.MakePointer(destination),
 		},
 		RecordBase: format.RecordBase{
 			Metadata: metadata.RecordMetadata{

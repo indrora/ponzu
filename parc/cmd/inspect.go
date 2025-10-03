@@ -4,9 +4,6 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -23,83 +20,37 @@ var inspectCmd = &cobra.Command{
 including compression information and similar. `,
 	Run: func(cmd *cobra.Command, args []string) {
 		for _, filename := range args {
-			inspectArchive(filename)
+			inspectArchive(cmd, filename)
 		}
 	},
 	Args: cobra.MinimumNArgs(1),
 }
 
-func inspectArchive(path string) {
+func inspectArchive(cmd *cobra.Command, path string) {
 
-	verbose, _ := rootCmd.Flags().GetBool("verbose")
+	//verbose, _ := rootCmd.Flags().GetBool("verbose")
 
-	fileh, err := os.Open(path)
+	fh, err := os.OpenFile(path, os.O_RDONLY, os.ModeExclusive)
 	if err != nil {
-		return
+		cmd.PrintErrln("Failed to open file:", err)
 	}
-	defer fileh.Close()
-	archiveReader := reader.NewReader(fileh)
+	defer fh.Close()
 
-	err = nil
-	for !errors.Is(err, io.EOF) {
+	r := reader.NewReader(fh)
 
-		var preamble *format.Preamble
-		var meta *format.RecordInfo
-
-		preamble, meta, err = archiveReader.Next()
-
-		if err != nil && !errors.Is(err, io.EOF) {
-			fmt.Println("Failed to read record header:")
-			fmt.Println(err)
-			return
-		}
-		if !errors.Is(err, io.EOF) {
-
-			if preamble != nil {
-				if verbose {
-					fmt.Println("Preamble:")
-					spew.Dump(preamble)
-					fmt.Println("Metadata:")
-					spew.Dump(meta)
-				} else {
-					explainRecord(*preamble, *meta)
-				}
-			} else {
-				fmt.Printf("Preamble was nil... Something went wrong")
-				return
-			}
-		} else {
-			fmt.Println("No more records.")
-		}
-	}
-}
-
-func explainRecord(preamble format.Preamble, recordInfo format.RecordInfo) {
-
-	switch preamble.Rtype {
-	case format.RECORD_TYPE_CONTROL:
-		fmt.Print("Control record: ")
-		if preamble.Flags == format.RECORD_FLAG_CONTROL_START {
-			fmt.Println("Begin archive.", "ponzu version", recordInfo.StartOfArchive.Version)
-		} else if preamble.Flags == format.RECORD_FLAG_CONTROL_END {
-			fmt.Println("End of archive marker")
-		} else {
-			fmt.Println("Unknown control record.")
-		}
-	case format.RECORD_TYPE_CONTINUE:
-		fmt.Println("[Previous record continues]")
-	default:
-		fmt.Printf("Record (type=%v, flags=%v, len=%v mod=%v infolen=%v, compression=%v)\n",
-			preamble.Rtype,
-			preamble.Flags,
-			preamble.DataLen,
-			preamble.Modulo,
-			preamble.InfoLength,
-			preamble.Compression)
-		fmt.Printf("Hashes:\n\tinfo: %x\n\tbody: %x\n", preamble.InfoChecksum, preamble.DataChecksum)
-		spew.Dump(recordInfo)
+	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
+		cmd.Printf("Record\n\ttype:%v compression:%v flags:%v\n", p.Rtype, p.Compression, p.Flags)
+		cmd.Printf("Size: info:%v bytes, data: %v bytes (padding: %v bytes) \n", p.InfoLength, p.DataLen, p.Modulo)
+		cmd.Printf("Checksums:\n\tinfo:%v\n\tdata:%v\n", p.InfoChecksum, p.DataChecksum)
+		spew.Fdump(cmd.OutOrStdout(), m)
+		return nil
 	}
 
+	err = r.Walk(walkFun)
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func init() {

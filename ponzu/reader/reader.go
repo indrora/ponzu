@@ -72,15 +72,16 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 		return nil, nil, ErrExpectedHeader
 	}
 
-	// Parse from the preamble the metadata.
+	// Copy out the record information bock.
 	cborData := new(bytes.Buffer)
 	n, err := io.CopyN(cborData, reader.stream, int64(mPreamble.InfoLength))
 
 	// Realign the reader to the start of the data (or next record)
 	reader.stream.Realign()
 
+	// CHeck that we read the right amount of information.
 	if n != int64(mPreamble.InfoLength) {
-		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of metadata", err, mPreamble.InfoLength, n)
+		return mPreamble, nil, fmt.Errorf("%w: tried reading %v bytes, only got %v of record information", err, mPreamble.InfoLength, n)
 	} else if err != nil {
 		return mPreamble, nil, err
 	}
@@ -89,11 +90,14 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 	metaHashCheck := blake2b.Sum512(cborDataBytes)
 
 	if !bytes.Equal(metaHashCheck[:], mPreamble.InfoChecksum[:]) {
-		return mPreamble, nil, fmt.Errorf("%w: metadata checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.InfoChecksum, metaHashCheck)
+		return mPreamble, nil, fmt.Errorf("%w: record information checksum failed, expected %x, got %x ", ErrHashMismatch, mPreamble.InfoChecksum, metaHashCheck)
 	}
 
 	if len(cborDataBytes) > 0 {
 		mInfo, err = UnmarshalRecordInfo(mPreamble, cborDataBytes)
+		if err != nil {
+			return mPreamble, nil, fmt.Errorf("failed to unmarshal record information: %w", err)
+		}
 	}
 
 	reader.lastPreamble = mPreamble
@@ -110,6 +114,7 @@ func (reader *Reader) Next() (mPreamble *format.Preamble, mInfo *format.RecordIn
 		}
 	case format.RECORD_TYPE_ZDICTIONARY:
 		// Special case: we are going to consume the zstd dictionary and then return the next frame afterwards
+		// TODO: allow for this to just be passed along.
 		buff := new(bytes.Buffer)
 		err := reader.CopyAll(buff, true)
 		if err != nil && err != io.EOF {

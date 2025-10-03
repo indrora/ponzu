@@ -68,13 +68,6 @@ A complete archive looks like this:
 Archives may be appended to one another. In such a case, each should be considered independent. 
 
 
-
-
-# Paths
-
-Paths (including the archive prefix) in Ponzu archives MUST be fully resolved (containing no
-`..` portions.) A leading `/` is always to be interpreted as `./` except for symbolic and hard links.  
-
 # The most minimal Ponzu archive
 
 The most minimal Ponzu archive consists purely of two control records: a `CONTROL_START` record and a `CONTROL_END` record. 
@@ -256,17 +249,21 @@ All values shall be Big-Endian (“Network Order”), as defined by RFC8949.
 
 ## Security
 
+Not described here is verifying archive authenticity or provenance. A compliant implementation may add additional records for such things as digital signatures. As an example, additional, implementation-dependent keys may be added to the Start of Archive record to add a digital signature for the complete archive. This is not covered in version 1 of this specification.
+
+### Paths
+
 A common vulnerability in Tar and other formats is path traversal attacks. These attacks are often
 the result of something similar to files named `../../../../../etc/sshd/authorized-keys` and the like.
 
-Ponzu considers these paths unsafe. A Ponzu archive must only create a sub-tree.
-This may concern those who maintain package management around tar: Traditionally, package systems built around tar have used relative paths or paths of / to start the archive.
+Paths (including the archive prefix) in Ponzu archives MUST be fully resolved (containing no
+`..` portions.) A leading `/` is always to be interpreted as `./` except for symbolic and hard links.  
 
-All Ponzu archives are given a prefix. This prefix could be interpeted as a suggestion – e.g. an archive with the prefix `libgizmo-1.33.7` may be overridden with simply `libgizmo` or even ignored should the implementation decide to do so. Should an implementation wish, it could override the prefix with no or little ill effect.
+This may concern those who maintain package management around tar:
+Traditionally, package systems built around tar have used relative paths or paths of / to start the archive. In this case, it is up to the implementation to provide a declared "safe" way of handling this situation. 
 
-Not described here is verifying archive authenticity or provenance. A compliant implementation may add additional records for such things as digital signatures. As an example, additional, implementation-dependent keys may be added to the Start of Archive record to add a digital signature for the complete archive. This is not covered in version 1 of this specification.
 
-## Checksums
+### Checksums
 
 All checksums in version 1 of Ponzu are BLAKE2b-512 as defined by [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
 
@@ -295,6 +292,22 @@ func main() {
 ```
 
 Implementations are free to determine how they present errors in validation, but must include a mechanism to be informed about a failure in data validation. 
+
+# Reference Go implementation notes
+
+The reference implementation has several specific quirks:
+
+* The reader/writer interface is OS-agnostic and expects that the implementation around it provides OS-specific metadata
+* The reader interface silently consumes ZStandard dictionary records for the purposes of decompression
+* The reader interface's `Validate(...)` call advances the reader
+* There is no "Rewind" within the reader interface; file position management is up to a sufficiently complex user.
+* The writer interface makes an attempt to sanitize paths
+
+The reader/writer interface depends on `https://github.com/klauspost/compress` for compression. 
+
+
+
+
 
 # Appendix: Structures for Metadata maps
 

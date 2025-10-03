@@ -44,10 +44,10 @@ func (archive *ArchiveWriter) AppendStart(prefix string, comment string) error {
 
 	// This is the CBOR portion.
 	archiveHeader := format.StartOfArchive{
-		Version: format.PONZU_VERSION,
-		Host:    format.HOST_OS_GENERIC,
-		Prefix:  prefix,
-		Comment: comment,
+		Version: metadata.MakePointer(format.PONZU_VERSION),
+		Host:    metadata.MakePointer(format.HOST_OS_GENERIC),
+		Prefix:  metadata.MakePointer(prefix),
+		Comment: metadata.MakePointer(comment),
 	}
 
 	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_START, format.COMPRESSION_NONE, archiveHeader, nil)
@@ -189,7 +189,7 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 	defer fstream.Close()
 
 	meta := format.File{
-		Name: path,
+		Name: metadata.MakePointer(path),
 		RecordBase: format.RecordBase{
 			Metadata: metadata.RecordMetadata{
 				CommonMetadata: metadata.CommonMetadata{

@@ -65,7 +65,7 @@ func TestWriterEncode(t *testing.T) {
 	randData := make([]byte, int(1.75*float32(format.BLOCK_SIZE)))
 	crand.Read(randData)
 	fileinfo := format.File{
-		Name: "foo",
+		Name: metadata.MakePointer("foo"),
 
 		RecordBase: format.RecordBase{
 

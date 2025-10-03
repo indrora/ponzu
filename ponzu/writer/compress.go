@@ -43,6 +43,6 @@ func (archive *ArchiveWriter) getCompressedChunk(data []byte, compressor format.
 
 		return buf.Bytes(), nil
 	default:
-		return nil, errors.New("unkonwn compressor")
+		return nil, errors.New("unknown compressor")
 	}
 }
