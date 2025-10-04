@@ -4,7 +4,6 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -40,15 +39,16 @@ func inspectArchive(cmd *cobra.Command, path string) {
 	r := reader.NewReader(fh)
 
 	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
-		fmt.Println("--- enter walkFun ---")
+		spew.Config.MaxDepth = 2
 		spew.Dump(p)
 		switch p.Rtype {
 		case format.RECORD_TYPE_CONTROL:
 			if p.Flags == format.RECORD_FLAG_CONTROL_START {
 				spew.Dump(m.StartOfArchive)
 			}
+		default:
+			spew.Dump(m)
 		}
-		fmt.Println("--- exit walkFun ---")
 		return nil
 	}
 

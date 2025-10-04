@@ -1,8 +1,6 @@
 package reader
 
 import (
-	"fmt"
-
 	"github.com/fxamacker/cbor/v2"
 	"github.com/indrora/ponzu/ponzu/format"
 )
@@ -12,8 +10,6 @@ func UnmarshalRecordInfo(preamble *format.Preamble, data []byte) (*format.Record
 	var info = &format.RecordInfo{}
 
 	var err error = nil
-
-	fmt.Printf("rtype = %d size = %d\n", preamble.Rtype, preamble.InfoLength)
 
 	switch preamble.Rtype {
 	case format.RECORD_TYPE_DIRECTORY:
