@@ -1,3 +1,6 @@
 [submodule "docs/themes/lotusdocs"]
 	path = docs/themes/lotusdocs
 	url = https://github.com/indrora/lotusdocs
+[submodule "docs/themes/hugo-modernist"]
+	path = docs/themes/hugo-modernist
+	url = https://github.com/indrora/hugo-modernist.git
