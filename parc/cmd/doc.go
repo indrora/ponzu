@@ -1,40 +1,39 @@
 package cmd
 
 import (
+	"fmt"
+	"path"
+	"strings"
+
+	"github.com/indrora/ponzu/parc/docs"
 	"github.com/spf13/cobra"
 )
 
 var genDocCmd = &cobra.Command{
-	Use:   "Generate documentation for web",
+	Use:   "gendocs",
 	Short: "Generate docs",
 	Long:  "Generate Markdown/manual pages for the application",
 	Run:   genDocsMain,
 }
 
-func docMakeFrontmatter(k string) string {
-	return ""
-}
-
 func docMakeLink(n string) string {
-	return n
+	return fmt.Sprintf("[ %s ]({{< ref %s >}})", n, strings.ReplaceAll(n, "_", "-"))
 }
 
 func genDocsMain(cmd *cobra.Command, args []string) {
 
-	for _, c := range rootCmd.Commands() {
-		generatePage(c)
+	finalpath := path.Join(*outputDir, "doc.yaml")
+
+	err := docs.GenerateDocumentation(cmd.Root(), finalpath)
+
+	if err != nil {
+		panic(err)
 	}
-
-}
-
-func generatePage(c *cobra.Command) {
-	//
-	panic("xxxx")
 }
 
 var outputDir *string
 
 func init() {
 	rootCmd.AddCommand(genDocCmd)
-	outputDir = genDocCmd.Flags().String("path", "./docs/parc/", "Path to generate documentation files")
+	outputDir = genDocCmd.Flags().String("path", "./docs/data/", "Path to generate documentation files")
 }

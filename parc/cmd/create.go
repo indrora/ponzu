@@ -180,7 +180,7 @@ func createMain(cmd *cobra.Command, args []string) {
 
 // createCmd represents the create command
 var createCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create [flags] ARCHIVE ...FILES",
 	Short: "Create a Ponzu archive",
 	Long: `Create an archive from a specified series of glob patterns
 
@@ -202,7 +202,7 @@ Depending on your shell, you may have to enclose globbing patterns in single quo
 `,
 	Run:     createMain,
 	Example: "parc create myarchive.pzarc a/** foo",
-	Args:    cobra.MinimumNArgs(1),
+	Args:    cobra.MinimumNArgs(2),
 }
 
 var BuffSize *uint64
