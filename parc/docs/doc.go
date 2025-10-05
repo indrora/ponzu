@@ -15,8 +15,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.yaml.in/yaml/v4"
 	"golang.org/x/exp/slices"
-	"gopkg.in/yaml.v3"
 )
 
 type DocOption struct {
@@ -214,9 +214,10 @@ func hasSeeAlso(cmd *cobra.Command) bool {
 // Temporary workaround for yaml lib generating incorrect yaml with long strings
 // that do not contain \n.
 func forceMultiLine(s string) string {
-	if len(s) > 60 && !strings.Contains(s, "\n") {
-		s = s + "\n"
-	}
+	/*
+		if len(s) > 60 && !strings.Contains(s, "\n") {
+			s = s + "\n"
+		} */
 	return s
 }
 
