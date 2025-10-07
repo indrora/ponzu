@@ -1,12 +1,7 @@
 ---
 weight: 200
 title: "The Ponzu Spec"
-description: ""
-icon: "article"
-date: "2023-12-19T22:26:17-08:00"
-lastmod: "2025-09-21T01:14:00-08:00"
 draft: false
-toc: true
 ---
 
 This document outlines the specification for the Ponzu archive format. 
@@ -76,12 +71,12 @@ The most minimal Ponzu archive consists purely of two control records: a `CONTRO
 
 The following flags are used:
 
-| Value  | Introduced | Name             | Name                                                                 | Context |
-| ------ | ---------- | ---------------- | -------------------------------------------------------------------- | ------- |
-| 0b0001 | 1          | CONTROL_START    | (for a control record) This is the start of an archive.              | Control |
-| 0b0010 | 1          | CONTROL_END      | (For a control record) This is the end of an archive.                | Control |
-| 0b0100 | 1          | CONTROL_STREAMED | (for a control record) This archive may not contain checksums.       | Control |
-| 0b0001 | 1          | CONTINUES        | (For any record) This record has continuation blocks that follow it. | Any     |
+| Value    | Introduced | Name               | Name                                                                 | Context |
+| -------- | ---------- | ------------------ | -------------------------------------------------------------------- | ------- |
+| `0b0001` | 1          | `CONTROL_START   ` | (for a control record) This is the start of an archive.              | Control |
+| `0b0010` | 1          | `CONTROL_END     ` | (For a control record) This is the end of an archive.                | Control |
+| `0b0100` | 1          | `CONTROL_STREAMED` | (for a control record) This archive may not contain checksums.       | Control |
+| `0b0001` | 1          | `CONTINUES       ` | (For any record) This record has continuation blocks that follow it. | Any     |
 
 Flags outside the mask of `0x00FF` are reserved for implementation specific flags.
 
@@ -114,12 +109,12 @@ An archive control record is defined by its flags:
 
 The Start of Archive record is used to define the paramters of an archive.
 
-| Name    | since | type   | Description                                        |
-| ------- | ----- | ------ | -------------------------------------------------- |
-| version | 1     | Uint8  | Version of the Ponzu spec this archive conforms to |
-| host    | 1     | string | Host OS type that this archive was created on      |
-| prefix  | 1     | string | Prefix used by all files in this archive           |
-| comment | 1     | string | Comment, text                                      |
+| Name      | since | type   | Description                                        |
+| --------- | ----- | ------ | -------------------------------------------------- |
+| `version` | 1     | Uint8  | Version of the Ponzu spec this archive conforms to |
+| `host   ` | 1     | string | Host OS type that this archive was created on      |
+| `prefix ` | 1     | string | Prefix used by all files in this archive           |
+| `comment` | 1     | string | Comment, text                                      |
 
 {{< alert icon="" context="info" >}}
  Note: The prefix MUST NOT begin with a leading / and any compliant implementation MUST discard a leading slash unless the implementation gives a mechanism to “trust” the archive.
@@ -130,32 +125,32 @@ The End of Archive record is simply a marker that the end of the archive has bee
 ## Common
 
 
-| Name       | Since | Type | Description            |
-| ---------- | ----- | ---- | ---------------------- |
-| osMetadata | 1     | map  | OS-Specific attributes |
+| Name         | Since | Type | Description            |
+| ------------ | ----- | ---- | ---------------------- |
+| `osMetadata` | 1     | map  | OS-Specific attributes |
 
 ## File
 
-| Name | Since | type   | Description |
-| ---- | ----- | ------ | ----------- |
-| name | 1     | string | filename    |
+| Name   | Since | type   | Description |
+| ------ | ----- | ------ | ----------- |
+| `name` | 1     | string | filename    |
 
 ## Symlinks and Hardlinks
 
 Links are Files with no data section and the following fields:
 
-| Name   | Since | type   | Description |
-| ------ | ----- | ------ | ----------- |
-| name   | 1     | string | filename    |
-| target | 1     | string | Link target |
+| Name     | Since | type   | Description |
+| -------- | ----- | ------ | ----------- |
+| `name  ` | 1     | string | filename    |
+| `target` | 1     | string | Link target |
 
 Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`.
 
 ## Directories
 
-| Name | Since | type   | Description    |
-| ---- | ----- | ------ | -------------- |
-| name | 1     | string | directory name |
+| Name   | Since | type   | Description    |
+| ------ | ----- | ------ | -------------- |
+| `name` | 1     | string | directory name |
 
 
 ## ZStandard Dictionary
@@ -163,9 +158,9 @@ Hardlinks MUST refer to a file within the archive and MUST NOT begin with `/`.
 a ZStandard Dictionary has no specific fields, however the following optional fields
 may be included:
 
-| Name    | Since | type   | Description                                                 |
-| ------- | ----- | ------ | ----------------------------------------------------------- |
-| version | 1     | string | Version of ZStandard that created this dictionary, if known |
+| Name      | Since | type   | Description                                                 |
+| --------- | ----- | ------ | ----------------------------------------------------------- |
+| `version` | 1     | string | Version of ZStandard that created this dictionary, if known |
 
 ZStandard dictionaries *must not* be compressed.
 
@@ -176,12 +171,12 @@ When a Dictionary record is received, the old dictionary (if any) should be disc
 For operating systems that support “Special” files (e.g. FIFOs, device nodes, etc),
 this type is used. These files generally do not contain “data”.
 
-| Name      | Since | type   | Description                 |
-| --------- | ----- | ------ | --------------------------- |
-| name      | 1     | string | filename                    |
-| type      | 1     | string | only “mknod” valid for now. |
-| mknodMode | 1     | u32    | Mode for mknod              |
-| mknodDev  | 1     | u32    | Dev_t value for mknod       |
+| Name        | Since | type   | Description                 |
+| ----------- | ----- | ------ | --------------------------- |
+| `name`      | 1     | string | filename                    |
+| `type`      | 1     | string | only “mknod” valid for now. |
+| `mknodMode` | 1     | u32    | Mode for mknod              |
+| `mknodDev`  | 1     | u32    | Dev_t value for mknod       |
 
 ## Continuation Block
 
@@ -204,9 +199,9 @@ Two algorithms are defined for compression in Ponzu: ZStandard and Brotli. Compr
 
 | value | Since | name      | Info                             |
 | ----- | ----- | --------- | -------------------------------- |
-| 0     | 1     | None      |                                  |
-| 1     | 1     | ZStandard | https://facebook.github.io/zstd/ |
-| 2     | 1     | Brotli    | https://github.com/google/brotli |
+| `0`   | 1     | None      |                                  |
+| `1`   | 1     | ZStandard | https://facebook.github.io/zstd/ |
+| `2`   | 1     | Brotli    | https://github.com/google/brotli |
 
 Compression is applied only to the data chunks that follow a record header. 
 

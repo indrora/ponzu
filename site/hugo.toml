@@ -10,20 +10,20 @@ theme="hugo-modernist"
 
 [menus]
   [[menus.main]]
-    pre = "Visit"
-    name = 'Home'
-    pageRef = '/'
+    pre = "Read"
+    title = 'Why'
+    pageRef = '/doc/intro/'
     weight = 10
 
   [[menus.main]]
     pre = "Read the"
-    name = 'Docs'
-    pageRef = '/docs'
+    title = 'Docs'
+    pageRef = '/doc/spec/'
     weight = 20
 
   [[menus.main]]
     pre = "View on"
-    name = 'GitHub'
+    title = 'GitHub'
     url = "https://github.com/indrora/ponzu"
     weight = 30
 

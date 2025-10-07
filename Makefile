@@ -13,8 +13,16 @@ parc:
 	go build -o bin/ ./parc/
 spewstat:
 	go build -o bin spewstat.go
-parcdocs:
-	go run ./parc/gendocs.go
+
+ifeq ($(OS),Windows_NT)
+docs: parc 
+	./bin/parc.exe gendocs --path ./site/data/
+else
+clean: parc
+	./bin/parc gendocs --path ./site/data/
+endif
+
+
 test:
 	go test ./ponzu/...
-all: parc parcdocs
+all: parc docs

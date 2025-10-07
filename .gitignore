@@ -1,6 +1,7 @@
 bin/**
-docs/public
-docs/resources
+site/public
+site/resources
 .DS_Store
 **/.hugo_build.lock
 **.afdesign~lock~
+site/data/doc.yaml
