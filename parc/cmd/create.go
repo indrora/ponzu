@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/indrora/ponzu/eflag"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/writer"
 	"github.com/spf13/cobra"
@@ -20,30 +21,30 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-func getFiles(relroot string, pathn string) (map[string]string, error) {
+func getFiles(searchStart string, searchPattern string) (map[string]string, error) {
 
-	pathn = filepath.ToSlash(pathn)
+	searchPattern = filepath.ToSlash(searchPattern)
 
-	if !doublestar.ValidatePathPattern(pathn) {
+	if !doublestar.ValidatePathPattern(searchPattern) {
 		//GlobalLogger.Panic("Invalid search pattern", zap.String("pattern", pathn))
-		return nil, fmt.Errorf("invalid search pattern %s", pathn)
+		return nil, fmt.Errorf("invalid search pattern %s", searchPattern)
 	}
 
-	mid, pattern := doublestar.SplitPattern(pathn)
+	mid, pattern := doublestar.SplitPattern(searchPattern)
 
-	absroot := filepath.Join(relroot, mid)
-	dir_fs := os.DirFS(absroot)
+	combinedSearchPath := filepath.Join(searchStart, mid)
+	searchFS := os.DirFS(combinedSearchPath)
 
-	foundpaths, err := doublestar.Glob(dir_fs, pattern)
+	foundPaths, err := doublestar.Glob(searchFS, pattern)
 
 	if err != nil {
 		return nil, err
 	}
 
-	files := make(map[string]string, len(foundpaths))
-	for _, path := range foundpaths {
+	files := make(map[string]string, len(foundPaths))
+	for _, path := range foundPaths {
 		archivePath := filepath.Clean(filepath.Join(mid, path))
-		abspath, err := filepath.Abs(filepath.Join(relroot, mid, path))
+		abspath, err := filepath.Abs(filepath.Join(searchStart, mid, path))
 		if err != nil {
 			return nil, errors.Join(errors.New("failed to get absolute path for "+abspath), err)
 		}
@@ -54,84 +55,93 @@ func getFiles(relroot string, pathn string) (map[string]string, error) {
 }
 
 func createMain(cmd *cobra.Command, args []string) {
-	verbose, _ = rootCmd.Flags().GetBool("verbose")
 
+	// Check that we have enough arguments
 	if len(args) < 2 {
 		fmt.Fprintln(cmd.ErrOrStderr(), "Expected 2 arguments, at least")
+		cmd.Usage()
 		return
 	}
 
-	archiveFname := args[0]
-	archivePaths := args[1:]
+	// some things we use
+	archiveFilename := args[0]
+	archiveSearchPaths := args[1:]
 
-	prefix, _ := cmd.Flags().GetString("prefix")
-	comment, _ := cmd.Flags().GetString("comment")
-	relroot, _ := cmd.Flags().GetString("chdir")
-
+	// Search for the files in the 	search paths
 	files := make(map[string]string)
-
-	for _, pathn := range archivePaths {
-		nfiles, err := getFiles(relroot, pathn)
+	for _, searchPath := range archiveSearchPaths {
+		foundFiles, err := getFiles(*createCmdOpts.SearchPath, searchPath)
 		if err != nil {
-			GlobalLogger.Fatal("invalid path specifier", zap.String("pattern", pathn), zap.Error(err))
+			GlobalLogger.Fatal("invalid path specifier", zap.String("pattern", searchPath), zap.Error(err))
 		} else {
-			for lname, rname := range nfiles {
-				files[lname] = rname
+			for localName, archiveName := range foundFiles {
+				files[localName] = archiveName
 			}
 		}
 	}
 
 	GlobalLogger.Info("Done collecting files", zap.Int("count", len(files)))
 
+	// If the archive will be empty, say so.
 	if (len(files)) < 1 {
 		GlobalLogger.Warn("Archive will contain no records!")
 	}
 
+	// Copy the list of files over to a new array so we can sort them
 	archive_files := make([]string, 0, len(files))
 	for k := range files {
 		archive_files = append(archive_files, k)
 	}
+
 	// sort the keys for deterministic output
 	sort.Strings(archive_files)
 
-	// open the archive
-	fhandle, err := os.OpenFile(archiveFname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	// open the archive file. We want to make sure that we're creating, truncating, and creating a one way handle
+	fhandle, err := os.OpenFile(archiveFilename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
 	if err != nil {
-		GlobalLogger.Fatal("failed to open output", zap.String("path", archiveFname), zap.Error(err))
+		GlobalLogger.Fatal("failed to open output", zap.String("path", archiveFilename), zap.Error(err))
 		return
 	}
 
 	GlobalLogger.Info("Creating archive",
-		zap.String("name", archiveFname),
-		zap.String("prefix", prefix),
-		zap.String("comment", comment),
-		zap.String("root", relroot),
+		zap.String("name", archiveFilename),
+		zap.String("prefix", *createCmdOpts.ArchivePrefix),
+		zap.String("comment", *createCmdOpts.ArchiveComment),
+		zap.String("root", *createCmdOpts.SearchPath),
 	)
-	writer := writer.NewWriter(fhandle, (*BuffSize)*format.BLOCK_SIZE)
+	writer := writer.NewWriter(fhandle, (*createCmdOpts.BuffSize)*format.BLOCK_SIZE)
 
+	// Clean up after ourselves when we're done here.
 	defer writer.AppendEnd()
 	defer fhandle.Close()
 
-	GlobalLogger.Info("Starting archive", zap.String("filename", archiveFname))
-	writer.AppendStart(prefix, comment)
+	GlobalLogger.Info("Starting archive", zap.String("filename", archiveFilename))
 
-	zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
-	if zstdDict != "" {
-		GlobalLogger.Debug("Adding Zstandard dictionary", zap.String("filename", zstdDict))
+	// Write start of archive header.
+	writer.AppendStart(*createCmdOpts.ArchivePrefix, *createCmdOpts.ArchiveComment)
+
+	//zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
+
+	if *createCmdOpts.ZstdDictPath != "" {
+		GlobalLogger.Debug("Adding Zstandard dictionary", zap.String("filename", *createCmdOpts.ZstdDictPath))
 		// try and open the file
-		dict, err := os.Open(zstdDict)
+		dict, err := os.Open(*createCmdOpts.ZstdDictPath)
 		if err != nil {
-			GlobalLogger.Fatal("Failed to open zstd dictionary", zap.String("filename", zstdDict), zap.Error(err))
+			GlobalLogger.Fatal("Failed to open zstd dictionary", zap.String("filename", *createCmdOpts.ZstdDictPath), zap.Error(err))
 			return
 		}
 		buff := new(bytes.Buffer)
+
 		_, err = io.Copy(buff, dict)
+
 		if err != nil {
-			GlobalLogger.Fatal("Failed to read zstd dictionary", zap.String("filename", zstdDict), zap.Error(err))
+			GlobalLogger.Fatal("Failed to read zstd dictionary", zap.String("filename", *createCmdOpts.ZstdDictPath), zap.Error(err))
 			return
 		}
+
 		dictBytes := buff.Bytes()
 
+		// we can't defer this call because that would defer at the end of the function, not here.
 		dict.Close()
 		GlobalLogger.Info("Appending ZStandard dictionary", zap.Int("size", len(dictBytes)))
 		writer.AppendZstdDict(dictBytes)
@@ -139,49 +149,45 @@ func createMain(cmd *cobra.Command, args []string) {
 
 	GlobalLogger.Info("files collected", zap.Int("count", len(archive_files)))
 
+	mask := os.ModeDir | os.ModeSymlink
+
+	// Work through each of the files found in the search path
 	for _, archiveFilePath := range archive_files {
 		localFilePath := files[archiveFilePath]
 
-		mask := os.ModeDir | os.ModeSymlink
-
-		statn, err := os.Lstat(localFilePath)
+		cFileStat, err := os.Lstat(localFilePath)
 		if err != nil {
 			GlobalLogger.Fatal("could not stat fle path", zap.String("path", localFilePath))
 		}
 
 		localLog := GlobalLogger.With(zap.String("localPath", localFilePath), zap.String("archivePath", archiveFilePath))
 
-		localLog.Debug("got file stat", zap.Any("stat", statn))
+		localLog.Debug("got file stat", zap.Any("stat", cFileStat))
 
-		switch mode := statn.Mode(); mode & mask {
+		switch mode := cFileStat.Mode(); mode & mask {
 		case os.ModeDir:
 			localLog.Info("Append Directory")
-			writer.AppendDirectory(archiveFilePath, statn)
+			writer.AppendDirectory(archiveFilePath, cFileStat)
 		case os.ModeSymlink:
 			linkinfo, err := os.Readlink(localFilePath)
 			if err != nil {
-				cmd.PrintErrf("Failed to read symlink %v: %v\n", localFilePath, err)
 				localLog.Fatal("Failed to read link information", zap.String("localPath", localFilePath), zap.Error(err))
 			} else {
 				localLog.Info("Append Symlink", zap.String("localPath", localFilePath), zap.String("linkInfo", linkinfo), zap.String("archivePath", archiveFilePath))
-				writer.AppendSymlink(archiveFilePath, linkinfo, statn)
+				writer.AppendSymlink(archiveFilePath, linkinfo, cFileStat)
 			}
 		default:
 			localLog.Info("Append regular file")
-			compression := format.COMPRESSION_NONE
-			if !*NoCompress && statn.Size() > int64(format.BLOCK_SIZE) {
-				if *UseBrotli {
-					compression = format.COMPRESSION_BROTLI
-				} else {
-					compression = format.COMPRESSION_ZSTD
-				}
-			} else {
-				if verbose {
-					localLog.Warn("File is smaller than one block, not compressing")
-				}
+			cRecordCompression := *(createCmdOpts.CompressionType)
+
+			// If we are told to compress but the file is smaller than the size of a block, there is no reason to do so.
+			// Warn that we're going to skip compression
+			if cRecordCompression != format.COMPRESSION_NONE && cFileStat.Size() < int64(format.BLOCK_SIZE) {
+				localLog.Warn("File is smaller than single block, not compressing", zap.Int64("size", cFileStat.Size()))
+				cRecordCompression = format.COMPRESSION_NONE
 			}
 
-			if err = writer.AppendFile(archiveFilePath, localFilePath, compression, statn); err != nil {
+			if err = writer.AppendFile(archiveFilePath, localFilePath, cRecordCompression, cFileStat); err != nil {
 				localLog.Fatal("Failed to append file to archive", zap.Error(err))
 				return
 			}
@@ -217,18 +223,39 @@ Depending on your shell, you may have to enclose globbing patterns in single quo
 	Args:    cobra.MinimumNArgs(2),
 }
 
-var BuffSize *uint64
-var UseBrotli *bool
-var NoCompress *bool
-var verbose bool
+var compressTypes = map[string]format.CompressionType{
+	"zstd":   format.COMPRESSION_ZSTD,
+	"brotli": format.COMPRESSION_BROTLI,
+	"none":   format.COMPRESSION_NONE,
+}
+
+type createOpts struct {
+	BuffSize        *uint64
+	CompressionType *format.CompressionType
+	ForceCompress   *bool
+	ArchiveComment  *string
+	ArchivePrefix   *string
+	ZstdDictPath    *string
+	SearchPath      *string
+}
+
+var createCmdOpts = createOpts{
+	CompressionType: new(format.CompressionType),
+}
 
 func init() {
 	rootCmd.AddCommand(createCmd)
-	createCmd.Flags().String("comment", "", "Add comment to archive")
-	createCmd.Flags().String("prefix", "", "Archive prefix")
-	BuffSize = createCmd.Flags().Uint64("buff-size", 5000, "Number of blocks to read into memory at once (default 5000, 2GB)")
-	createCmd.Flags().String("chdir", ".", "Search this path to find relative paths")
-	NoCompress = createCmd.Flags().Bool("no-compress", false, "Disable compression")
-	UseBrotli = createCmd.Flags().Bool("brotli", false, "use Brotli compression vs. ZStandard")
-	createCmd.Flags().String("zstandard-dictionary", "", "Path to ZStandard Dictionary to use")
+
+	// Minutiae
+	createCmdOpts.BuffSize = createCmd.Flags().Uint64("buff-size", 5000, "Number of blocks to read into memory at once (default 5000, 2GB)")
+	createCmdOpts.SearchPath = createCmd.Flags().StringP("chdir", "C", ".", "Search this path to find relative paths")
+
+	// Archive information
+	createCmdOpts.ArchiveComment = createCmd.Flags().String("comment", "", "Add comment to archive")
+	createCmdOpts.ArchivePrefix = createCmd.Flags().String("prefix", "", "Archive prefix")
+
+	// Compression options
+
+	createCmdOpts.ZstdDictPath = createCmd.Flags().String("zstandard-dictionary", "", "Path to ZStandard Dictionary to use")
+	createCmd.Flags().Var(eflag.NewEnumFlag(createCmdOpts.CompressionType, format.COMPRESSION_ZSTD, "type", compressTypes), "compression", "Specify compression (none,zstd,brotli) to use")
 }
