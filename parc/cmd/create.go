@@ -15,6 +15,7 @@ import (
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/writer"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
@@ -24,8 +25,8 @@ func getFiles(relroot string, pathn string) (map[string]string, error) {
 	pathn = filepath.ToSlash(pathn)
 
 	if !doublestar.ValidatePathPattern(pathn) {
-		fmt.Println("Invalid path pattern: ", pathn)
-		return nil, nil
+		//GlobalLogger.Panic("Invalid search pattern", zap.String("pattern", pathn))
+		return nil, fmt.Errorf("invalid search pattern %s", pathn)
 	}
 
 	mid, pattern := doublestar.SplitPattern(pathn)
@@ -69,13 +70,10 @@ func createMain(cmd *cobra.Command, args []string) {
 
 	files := make(map[string]string)
 
-	if verbose {
-		fmt.Printf("archive name = \"%v\", prefix = \"%v\", comment = \"%v\", searchroot=\"%v\"\n", archiveFname, prefix, comment, relroot)
-	}
 	for _, pathn := range archivePaths {
 		nfiles, err := getFiles(relroot, pathn)
 		if err != nil {
-			cmd.PrintErr(err)
+			GlobalLogger.Fatal("invalid path specifier", zap.String("pattern", pathn), zap.Error(err))
 		} else {
 			for lname, rname := range nfiles {
 				files[lname] = rname
@@ -83,35 +81,10 @@ func createMain(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// open the archive
-	fhandle, err := os.OpenFile(archiveFname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
-	if err != nil {
-		cmd.PrintErr(err)
-		return
-	}
-	defer fhandle.Close()
-	writer := writer.NewWriter(fhandle, (*BuffSize)*format.BLOCK_SIZE)
+	GlobalLogger.Info("Done collecting files", zap.Int("count", len(files)))
 
-	writer.AppendStart(prefix, comment)
-
-	zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
-	if zstdDict != "" {
-		// try and open the file
-		dict, err := os.Open(zstdDict)
-		if err != nil {
-			cmd.PrintErr(err)
-			return
-		}
-		buff := new(bytes.Buffer)
-		_, err = io.Copy(buff, dict)
-		if err != nil {
-			cmd.PrintErr(err)
-			return
-		}
-		dictBytes := buff.Bytes()
-
-		dict.Close()
-		writer.AppendZstdDict(dictBytes)
+	if (len(files)) < 1 {
+		GlobalLogger.Warn("Archive will contain no records!")
 	}
 
 	archive_files := make([]string, 0, len(files))
@@ -121,60 +94,99 @@ func createMain(cmd *cobra.Command, args []string) {
 	// sort the keys for deterministic output
 	sort.Strings(archive_files)
 
+	// open the archive
+	fhandle, err := os.OpenFile(archiveFname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		GlobalLogger.Fatal("failed to open output", zap.String("path", archiveFname), zap.Error(err))
+		return
+	}
+
+	GlobalLogger.Info("Creating archive",
+		zap.String("name", archiveFname),
+		zap.String("prefix", prefix),
+		zap.String("comment", comment),
+		zap.String("root", relroot),
+	)
+	writer := writer.NewWriter(fhandle, (*BuffSize)*format.BLOCK_SIZE)
+
+	defer writer.AppendEnd()
+	defer fhandle.Close()
+
+	GlobalLogger.Info("Starting archive", zap.String("filename", archiveFname))
+	writer.AppendStart(prefix, comment)
+
+	zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
+	if zstdDict != "" {
+		GlobalLogger.Debug("Adding Zstandard dictionary", zap.String("filename", zstdDict))
+		// try and open the file
+		dict, err := os.Open(zstdDict)
+		if err != nil {
+			GlobalLogger.Fatal("Failed to open zstd dictionary", zap.String("filename", zstdDict), zap.Error(err))
+			return
+		}
+		buff := new(bytes.Buffer)
+		_, err = io.Copy(buff, dict)
+		if err != nil {
+			GlobalLogger.Fatal("Failed to read zstd dictionary", zap.String("filename", zstdDict), zap.Error(err))
+			return
+		}
+		dictBytes := buff.Bytes()
+
+		dict.Close()
+		GlobalLogger.Info("Appending ZStandard dictionary", zap.Int("size", len(dictBytes)))
+		writer.AppendZstdDict(dictBytes)
+	}
+
+	GlobalLogger.Info("files collected", zap.Int("count", len(archive_files)))
+
 	for _, archiveFilePath := range archive_files {
 		localFilePath := files[archiveFilePath]
-
-		fmt.Printf("%s -> %v\n", archiveFilePath, localFilePath)
 
 		mask := os.ModeDir | os.ModeSymlink
 
 		statn, err := os.Lstat(localFilePath)
-		if err == nil {
-			switch mode := statn.Mode(); mode & mask {
-			case os.ModeDir:
-				if verbose {
-					fmt.Println("Directory")
-				}
-				writer.AppendDirectory(archiveFilePath, statn)
-			case os.ModeSymlink:
-				linkinfo, err := os.Readlink(localFilePath)
-				if err != nil {
-					cmd.PrintErrf("Failed to read symlink %v: %v\n", localFilePath, err)
-				} else {
-					if verbose {
-						fmt.Printf("Symlink to %v\n", linkinfo)
-					}
-					writer.AppendSymlink(archiveFilePath, linkinfo, statn)
-				}
-			default:
-				if verbose {
-					fmt.Printf("Regular file, size=%v, modtime=%v\n", statn.Size(), statn.ModTime())
-				}
+		if err != nil {
+			GlobalLogger.Fatal("could not stat fle path", zap.String("path", localFilePath))
+		}
 
-				compression := format.COMPRESSION_NONE
-				if !*NoCompress && statn.Size() > int64(format.BLOCK_SIZE) {
-					if *UseBrotli {
-						compression = format.COMPRESSION_BROTLI
-					} else {
-						compression = format.COMPRESSION_ZSTD
-					}
-				} else {
-					if verbose {
-						fmt.Println("File is smaller than single block, not compressing.")
-					}
-				}
+		localLog := GlobalLogger.With(zap.String("localPath", localFilePath), zap.String("archivePath", archiveFilePath))
 
-				if err = writer.AppendFile(archiveFilePath, localFilePath, compression, statn); err != nil {
-					cmd.PrintErr(err)
-					return
+		localLog.Debug("got file stat", zap.Any("stat", statn))
+
+		switch mode := statn.Mode(); mode & mask {
+		case os.ModeDir:
+			localLog.Info("Append Directory")
+			writer.AppendDirectory(archiveFilePath, statn)
+		case os.ModeSymlink:
+			linkinfo, err := os.Readlink(localFilePath)
+			if err != nil {
+				cmd.PrintErrf("Failed to read symlink %v: %v\n", localFilePath, err)
+				localLog.Fatal("Failed to read link information", zap.String("localPath", localFilePath), zap.Error(err))
+			} else {
+				localLog.Info("Append Symlink", zap.String("localPath", localFilePath), zap.String("linkInfo", linkinfo), zap.String("archivePath", archiveFilePath))
+				writer.AppendSymlink(archiveFilePath, linkinfo, statn)
+			}
+		default:
+			localLog.Info("Append regular file")
+			compression := format.COMPRESSION_NONE
+			if !*NoCompress && statn.Size() > int64(format.BLOCK_SIZE) {
+				if *UseBrotli {
+					compression = format.COMPRESSION_BROTLI
+				} else {
+					compression = format.COMPRESSION_ZSTD
+				}
+			} else {
+				if verbose {
+					localLog.Warn("File is smaller than one block, not compressing")
 				}
 			}
-		} else {
-			cmd.PrintErrf("Failed to stat file: %v", err)
+
+			if err = writer.AppendFile(archiveFilePath, localFilePath, compression, statn); err != nil {
+				localLog.Fatal("Failed to append file to archive", zap.Error(err))
+				return
+			}
 		}
 	}
-	writer.AppendEnd()
-	fhandle.Close()
 
 }
 

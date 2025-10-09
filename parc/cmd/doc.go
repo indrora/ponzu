@@ -22,7 +22,7 @@ func docMakeLink(n string) string {
 
 func genDocsMain(cmd *cobra.Command, args []string) {
 
-	finalpath := path.Join(*outputDir, "doc.yaml")
+	finalpath := path.Join(*outputDir, *outputFile)
 
 	err := docs.GenerateDocumentation(cmd.Root(), finalpath)
 
@@ -32,8 +32,12 @@ func genDocsMain(cmd *cobra.Command, args []string) {
 }
 
 var outputDir *string
+var outputFile *string
 
 func init() {
 	rootCmd.AddCommand(genDocCmd)
-	outputDir = genDocCmd.Flags().String("path", "./docs/data/", "Path to generate documentation files")
+	outputDir = genDocCmd.Flags().String("path", "", "Path to generate documentation files")
+	outputFile = genDocCmd.Flags().String("filename", "doc.yaml", "Filename to use")
+	genDocCmd.MarkFlagDirname("path")
+	genDocCmd.MarkFlagFilename("filename")
 }

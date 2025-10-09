@@ -66,7 +66,7 @@ func genDocTree(cmd *cobra.Command) map[string]DocCommand {
 }
 
 func genDocCommand(cmd *cobra.Command) DocCommand {
-	cmd.InitDefaultHelpCmd()
+	//	cmd.InitDefaultHelpCmd()
 	cmd.InitDefaultHelpFlag()
 
 	mDocCommand := DocCommand{}
@@ -77,6 +77,10 @@ func genDocCommand(cmd *cobra.Command) DocCommand {
 
 	if cmd.Runnable() {
 		mDocCommand.Usage = cmd.UseLine()
+	} else {
+		if cmd.HasSubCommands() {
+			mDocCommand.Usage = cmd.CommandPath() + " [command]"
+		}
 	}
 
 	if len(cmd.Example) > 0 {
