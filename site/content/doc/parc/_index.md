@@ -1,9 +1,7 @@
 ---
-weight: 300
 title: "PARC reference archiver documentation"
-description: ""
-false: true
-toc: true
+layout: "manpage"
+docfile: "doc"
 ---
 
 # Building

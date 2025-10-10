@@ -1,0 +1,25 @@
+{{ define "main" }}
+
+  {{with (index .Site.Data .Page.Params.docfile).rootcmd }}
+
+<h1>Name</h1>
+<tt>{{.name}} - {{.synopsis}}</tt>
+<h1>Usage</h1>
+{{.usage}}
+<h2>Description</h2>
+{{.description}}
+<h2>Options</h2>
+TODO: Options
+<h2>See Also</h2>
+<ul>
+  {{ range .children}}
+  <li>{{.}}</li>
+  {{end}}
+</ul>
+  {{ end }}
+
+  
+<h1>Additional Comments</h1>
+  {{ .Content }}
+
+{{ end }}
