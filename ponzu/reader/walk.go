@@ -15,7 +15,6 @@ func (archive *Reader) Walk(fn WalkFunc) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			panic(err)
 			return err
 		}
 
