@@ -5,54 +5,20 @@ package cmd
 
 import (
 	"bytes"
-	"errors"
+
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+
 	"sort"
 
 	"github.com/indrora/ponzu/eflag"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/writer"
+
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-
-	"github.com/bmatcuk/doublestar/v4"
 )
-
-func getFiles(searchStart string, searchPattern string) (map[string]string, error) {
-
-	searchPattern = filepath.ToSlash(searchPattern)
-
-	if !doublestar.ValidatePathPattern(searchPattern) {
-		//GlobalLogger.Panic("Invalid search pattern", zap.String("pattern", pathn))
-		return nil, fmt.Errorf("invalid search pattern %s", searchPattern)
-	}
-
-	mid, pattern := doublestar.SplitPattern(searchPattern)
-
-	combinedSearchPath := filepath.Join(searchStart, mid)
-	searchFS := os.DirFS(combinedSearchPath)
-
-	foundPaths, err := doublestar.Glob(searchFS, pattern)
-
-	if err != nil {
-		return nil, err
-	}
-
-	files := make(map[string]string, len(foundPaths))
-	for _, path := range foundPaths {
-		archivePath := filepath.Clean(filepath.Join(mid, path))
-		abspath, err := filepath.Abs(filepath.Join(searchStart, mid, path))
-		if err != nil {
-			return nil, errors.Join(errors.New("failed to get absolute path for "+abspath), err)
-		}
-		files[archivePath] = abspath
-	}
-
-	return files, nil
-}
 
 func createMain(cmd *cobra.Command, args []string) {
 
@@ -149,48 +115,14 @@ func createMain(cmd *cobra.Command, args []string) {
 
 	GlobalLogger.Info("files collected", zap.Int("count", len(archive_files)))
 
-	mask := os.ModeDir | os.ModeSymlink
-
 	// Work through each of the files found in the search path
 	for _, archiveFilePath := range archive_files {
 		localFilePath := files[archiveFilePath]
-
-		cFileStat, err := os.Lstat(localFilePath)
-		if err != nil {
-			GlobalLogger.Fatal("could not stat fle path", zap.String("path", localFilePath))
-		}
-
 		localLog := GlobalLogger.With(zap.String("localPath", localFilePath), zap.String("archivePath", archiveFilePath))
 
-		localLog.Debug("got file stat", zap.Any("stat", cFileStat))
-
-		switch mode := cFileStat.Mode(); mode & mask {
-		case os.ModeDir:
-			localLog.Info("Append Directory")
-			writer.AppendDirectory(archiveFilePath, cFileStat)
-		case os.ModeSymlink:
-			linkinfo, err := os.Readlink(localFilePath)
-			if err != nil {
-				localLog.Fatal("Failed to read link information", zap.String("localPath", localFilePath), zap.Error(err))
-			} else {
-				localLog.Info("Append Symlink", zap.String("localPath", localFilePath), zap.String("linkInfo", linkinfo), zap.String("archivePath", archiveFilePath))
-				writer.AppendSymlink(archiveFilePath, linkinfo, cFileStat)
-			}
-		default:
-			localLog.Info("Append regular file")
-			cRecordCompression := *(createCmdOpts.CompressionType)
-
-			// If we are told to compress but the file is smaller than the size of a block, there is no reason to do so.
-			// Warn that we're going to skip compression
-			if cRecordCompression != format.COMPRESSION_NONE && cFileStat.Size() < int64(format.BLOCK_SIZE) {
-				localLog.Warn("File is smaller than single block, not compressing", zap.Int64("size", cFileStat.Size()))
-				cRecordCompression = format.COMPRESSION_NONE
-			}
-
-			if err = writer.AppendFile(archiveFilePath, localFilePath, cRecordCompression, cFileStat); err != nil {
-				localLog.Fatal("Failed to append file to archive", zap.Error(err))
-				return
-			}
+		err = appendToArchive(localFilePath, localLog, writer, archiveFilePath)
+		if err != nil {
+			localLog.Fatal("Failed to append file", zap.Error(err))
 		}
 	}
 
