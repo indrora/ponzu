@@ -60,61 +60,75 @@ func (reader *Reader) Next() (rPreamble *format.Preamble, rInfo *format.RecordIn
 	// make sure we're on a block boundary
 	reader.stream.Realign()
 
+	// Set up our preamble
 	rPreamble = &format.Preamble{}
 
-	preamblebytes := make([]byte, binary.Size(*rPreamble))
-	i, e := reader.stream.Read(preamblebytes)
+	// We expect to read this many bytes out of the stream.
+	// We dont hardcode it here! This is not the place!
+	expectSize := int64(binary.Size(format.Preamble{}))
 
-	if e != nil {
-		if e == io.EOF {
+	// Set up a buffer to hold our preamble.
+	preambleBuffer := new(bytes.Buffer)
+	readPreambleBytes, err := io.CopyN(preambleBuffer, reader.stream, expectSize)
+
+	if err != nil {
+		if errors.Is(err, io.EOF) {
 			return nil, nil, io.EOF
 		}
 		return nil, nil, ErrExpectedHeader
 	}
 
-	if i != binary.Size(*rPreamble) {
-		return nil, nil, ErrExpectedHeader
+	// We should have gotten some number of bytes out -- check that
+	if readPreambleBytes != expectSize {
+		return nil, nil, fmt.Errorf("%w: expected to read %d bytes, read %d instead", ErrExpectedHeader, expectSize, readPreambleBytes)
 	}
 
-	breader := bytes.NewReader(preamblebytes)
-
-	if err = binary.Read(breader, binary.BigEndian, rPreamble); err != nil {
+	// Now, try and parse it into the preamble structure.
+	if err = binary.Read(preambleBuffer, binary.BigEndian, rPreamble); err != nil {
 		return nil, nil, errors.Join(err, ErrExpectedHeader)
 	}
 
+	// Check the magic
 	if !bytes.Equal(rPreamble.Magic[:], format.PREAMBLE_BYTES[:]) {
-		return nil, nil, ErrExpectedHeader
+		return nil, nil, fmt.Errorf("%w: preamble failed (got %s, expected %s)", ErrExpectedHeader, rPreamble.Magic, format.PREAMBLE_BYTES)
 	}
 
-	// Copy out the record information bock.
-	cborData := new(bytes.Buffer)
-	n, err := io.CopyN(cborData, reader.stream, int64(rPreamble.InfoLength))
+	// Not all records will have an info block.
+	if rPreamble.InfoLength > 0 {
 
-	if err == io.EOF {
-		return nil, nil, io.EOF
-	}
+		// Copy out the record information bock.
+		cborDataBuffer := new(bytes.Buffer)
+		n, err := io.CopyN(cborDataBuffer, reader.stream, int64(rPreamble.InfoLength))
 
-	// Check that we read the right amount of information.
-	if n != int64(rPreamble.InfoLength) {
-		return rPreamble, nil, fmt.Errorf("%w: Tried reading %v preamble bytes, got %v!", err, rPreamble.InfoLength, n)
-	} else if err != nil {
-		return nil, nil, err
-	}
+		if err == io.EOF {
+			return nil, nil, io.EOF
+		}
 
-	cborDataBytes := cborData.Bytes()
-	metaHashCheck := blake2b.Sum512(cborDataBytes)
+		// Check that we read the right amount of information.
+		// cast is OK: int16 -> int64 promotion
+		// TODO: should we check err first?
+		if n != int64(rPreamble.InfoLength) {
+			return rPreamble, nil, fmt.Errorf("%w: Tried reading %v preamble bytes, got %v", err, rPreamble.InfoLength, n)
+		} else if err != nil {
+			return nil, nil, err
+		}
 
-	if !bytes.Equal(metaHashCheck[:], rPreamble.InfoChecksum[:]) {
-		return nil, nil, fmt.Errorf("%w: record information checksum failed, expected %x, got %x ", ErrHashMismatch, rPreamble.InfoChecksum, metaHashCheck)
-	}
+		cborDataBytes := cborDataBuffer.Bytes()
+		metaHashCheck := blake2b.Sum512(cborDataBytes)
 
-	if len(cborDataBytes) > 0 {
+		// Checksum time.
+		if !bytes.Equal(metaHashCheck[:], rPreamble.InfoChecksum[:]) {
+			return nil, nil, fmt.Errorf("%w: record information checksum failed, expected %x, got %x ", ErrHashMismatch, rPreamble.InfoChecksum, metaHashCheck)
+		}
+
 		rInfo, err = UnmarshalRecordInfo(rPreamble, cborDataBytes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal record information: %w", err)
 		}
-	}
 
+	} else {
+		rInfo = &format.RecordInfo{}
+	}
 	// Realign the reader to the start of the data (or next record)
 	reader.stream.Realign()
 
