@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 
+	"github.com/indrora/ponzu/eflag"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
@@ -123,10 +124,35 @@ func run(cmd *cobra.Command, args []string) {
 
 }
 
-var forcedPrefix *string
+//var forcedPrefix *string
+
+type FilterMode int
+
+const (
+	FilterModeInclude FilterMode = iota
+	FilterModeExclude
+)
+
+var FilterModeMap = map[string]FilterMode{
+	"include": FilterModeInclude,
+	"exclude": FilterModeExclude,
+}
+
+type extractCmdOptions struct {
+	Prefix         *string
+	ExtractPath    *string
+	ShouldFilter   *bool
+	FilterPatterns *[]string
+	FilterMode     FilterMode
+}
+
+var cmdOpts = extractCmdOptions{FilterMode: FilterModeInclude}
 
 func init() {
 	rootCmd.AddCommand(extractCmd)
-	forcedPrefix = extractCmd.Flags().String("force-prefix", "", "Force the specified prefix")
-	extractCmd.Flags().String("root", "", "Extract to specified root path (in addition to prefix)")
+	cmdOpts.Prefix = extractCmd.Flags().String("prefix", "", "Force the specified prefix")
+	cmdOpts.ExtractPath = extractCmd.Flags().String("path", "", "Extract to specified root path (in addition to prefix)")
+	cmdOpts.ShouldFilter = extractCmd.Flags().Bool("filter", false, "Filter paths")
+	cmdOpts.FilterPatterns = extractCmd.Flags().StringArray("filter-pattern", []string{}, "Pattern to include/exclude from extraction")
+	extractCmd.Flags().Var(eflag.NewEnumFlag(&cmdOpts.FilterMode, FilterModeInclude, "mode", FilterModeMap), "filter-mode", "Filter direction: include/exclude")
 }
