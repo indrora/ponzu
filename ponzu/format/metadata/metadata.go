@@ -45,7 +45,7 @@ type UNIXMetadata struct {
 // Linux metadata: SELinux additions and capability flags.
 type LinuxMetadata struct {
 	SelinuxLabel   *string `cbor:"linux.selinux_label,omitempty"`
-	SelinuxContext *string `cbor:"linux.selinux_context.omitempty"`
+	SelinuxContext *string `cbor:"linux.selinux_context,omitempty"`
 	Capabilities   *uint64 `cbor:"linux.caps,omitempty"`
 }
 
