@@ -11,6 +11,7 @@ import (
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -33,9 +34,12 @@ func run(cmd *cobra.Command, args []string) {
 		cmd.PrintErrln("Expected 1 argument, got something else.")
 		return
 	}
+
+	localLogger := GlobalLogger.With(zap.String("filename", args[0]))
+
 	fh, err := os.OpenFile(args[0], os.O_RDONLY, os.ModeExclusive)
 	if err != nil {
-		cmd.PrintErrln("Failed to open file:", err)
+		localLogger.Fatal("Failed to open archive", zap.Error(err))
 	}
 	defer fh.Close()
 
@@ -43,74 +47,98 @@ func run(cmd *cobra.Command, args []string) {
 
 	// Get information about the archive
 
-	var cSOA *format.StartOfArchive
+	mPreamble, mRecord, err := r.Next()
 
-	// make sure it's nil at the start.
-	cSOA = nil
+	if err != nil {
+		localLogger.Fatal("Failed to read record", zap.Error(err))
+	}
+
+	// Verify that the first record we read is a control record and that it's a start flag.
+	if mPreamble.Rtype == format.RECORD_TYPE_CONTROL && mPreamble.Flags == format.RECORD_FLAG_CONTROL_START {
+		coa := mRecord.StartOfArchive
+
+		// Do we need to override the prefix, or do we use the one from the COA?
+		overridePrefix := cmd.Flags().Changed("prefix")
+		if !overridePrefix {
+			cmdOpts.Prefix = coa.Prefix
+		}
+
+		// Say something
+		localLogger.Info("unpacking archive",
+			zap.String("prefix", *cmdOpts.Prefix),
+			zap.String("comment", *coa.Comment),
+			zap.String("host", *coa.Host),
+			zap.Int("version", *coa.Version),
+		)
+
+	} else {
+		// The first record was the wrong type, bail!
+		localLogger.Fatal(
+			"First record was not start of archive",
+			zap.Uint8("rtype", uint8(mPreamble.Rtype)),
+			zap.Uint8("flags", uint8(mPreamble.Flags)),
+		)
+	}
 
 	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
 
-		if cSOA == nil {
-			if p.Rtype != format.RECORD_TYPE_CONTROL && p.Flags != format.RECORD_FLAG_CONTROL_START {
+		localLogger.Debug(
+			"Processing record",
+			zap.Binary("infoHash", p.InfoChecksum[:]),
+			zap.Binary("dataHash", p.DataChecksum[:]),
+			zap.Uint64("blocks", p.DataLen),
+		)
+		switch p.Rtype {
+
+		case format.RECORD_TYPE_FILE:
+			filename := m.File.Name
+			filesize := m.File.Metadata.FileSize
+
+			localLogger.Info("Extract regular file",
+				zap.Stringp("filename", filename),
+				zap.Uint64p("filesize", filesize),
+			)
+
+		case format.RECORD_TYPE_DIRECTORY:
+			filename := m.Directory.Name
+			localLogger.Info("Create directory", zap.Stringp("path", filename))
+		case format.RECORD_TYPE_CONTROL:
+			if p.Flags == format.RECORD_FLAG_CONTROL_START {
+				localLogger.Fatal("Control record out of sequence.")
 				return ErrMissingHeader
-			} else {
-				cSOA = m.StartOfArchive
-				// patch up the prefix if we have a change
-				if forcedPrefix != nil {
-					cmd.Println("Overriding prefix with " + *forcedPrefix)
-					cSOA.Prefix = forcedPrefix
-				}
 			}
+			if p.Flags == format.RECORD_FLAG_CONTROL_END {
 
-			cmd.Printf("Unpacking archive (version %v) with prefix %v \n", cSOA.Version, cSOA.Prefix)
-
-		} else {
-
-			switch p.Rtype {
-
-			case format.RECORD_TYPE_FILE:
-				filename := m.File.Name
-				filesize := m.File.Metadata.FileSize
-				cmd.Printf("Extract %s (size %s)\n", filename, filesize)
-
-			case format.RECORD_TYPE_DIRECTORY:
-				filename := m.Directory.Name
-				cmd.Printf("Create directory %s\n", filename)
-			case format.RECORD_TYPE_CONTROL:
-				if p.Flags == format.RECORD_FLAG_CONTROL_START {
-					cmd.PrintErrln("Encountered a start control record out of sequence.")
-					return ErrMissingHeader
-				}
-				if p.Flags == format.RECORD_FLAG_CONTROL_END {
-					cmd.Println("End of archive record found.")
-					cSOA = nil
-					return nil
-				}
-			case format.RECORD_TYPE_OS_SPECIAL:
-
-				specialType := m.OSSpecial.SpecialType
-
-				path := m.OSSpecial.Name
-
-				if *specialType == "mknod" {
-
-					device := m.OSSpecial.Device
-					mode := m.OSSpecial.Mode
-					cmd.Printf("mknod device %s (dev=%v, mode=%v)\n", path, device, mode)
-				}
-			case format.RECORD_TYPE_CONTINUE:
+				localLogger.Info("Found end of archive record ")
 				return nil
-			case format.RECORD_TYPE_HARDLINK:
-				path := m.Hardlink.Name
-				target := m.Hardlink.Target
-				cmd.Printf("Hard link: %s -> %s\n", path, target)
-			case format.RECORD_TYPE_SYMLINK:
-				path := m.Symlink.Name
-				target := m.Symlink.Target
-				cmd.Printf("Symlink: %s -> %s\n", path, target)
-			default:
-				cmd.PrintErrln("Encountered unknown record type... skipping")
 			}
+		case format.RECORD_TYPE_OS_SPECIAL:
+
+			specialType := m.OSSpecial.SpecialType
+
+			path := m.OSSpecial.Name
+
+			if *specialType == "mknod" {
+
+				device := m.OSSpecial.Device
+				mode := m.OSSpecial.Mode
+				cmd.Printf("mknod device %s (dev=%v, mode=%v)\n", path, device, mode)
+				localLogger.Info("mknod device", zap.Stringp("path", path), zap.Uint32p("device", device), zap.Uint32p("mode", mode))
+			} else {
+				localLogger.Fatal("Unknown special type", zap.Stringp("type", specialType))
+			}
+		case format.RECORD_TYPE_CONTINUE:
+			return nil
+		case format.RECORD_TYPE_HARDLINK:
+			path := m.Hardlink.Name
+			target := m.Hardlink.Target
+			cmd.Printf("Hard link: %s -> %s\n", path, target)
+		case format.RECORD_TYPE_SYMLINK:
+			path := m.Symlink.Name
+			target := m.Symlink.Target
+			cmd.Printf("Symlink: %s -> %s\n", path, target)
+		default:
+			cmd.PrintErrln("Encountered unknown record type... skipping")
 		}
 
 		return nil
@@ -151,7 +179,7 @@ var cmdOpts = extractCmdOptions{FilterMode: FilterModeInclude}
 func init() {
 	rootCmd.AddCommand(extractCmd)
 	cmdOpts.Prefix = extractCmd.Flags().String("prefix", "", "Force the specified prefix")
-	cmdOpts.ExtractPath = extractCmd.Flags().String("path", "", "Extract to specified root path (in addition to prefix)")
+	cmdOpts.ExtractPath = extractCmd.Flags().String("path", ".", "Extract to specified root path (in addition to prefix)")
 	cmdOpts.ShouldFilter = extractCmd.Flags().Bool("filter", false, "Filter paths")
 	cmdOpts.FilterPatterns = extractCmd.Flags().StringArray("filter-pattern", []string{}, "Pattern to include/exclude from extraction")
 	extractCmd.Flags().Var(eflag.NewEnumFlag(&cmdOpts.FilterMode, FilterModeInclude, "mode", FilterModeMap), "filter-mode", "Filter direction: include/exclude")
