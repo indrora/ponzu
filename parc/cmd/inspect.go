@@ -38,30 +38,7 @@ func inspectArchive(cmd *cobra.Command, path string) {
 
 	r := reader.NewReader(fh)
 
-	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
-
-		switch p.Rtype {
-		case format.RECORD_TYPE_DIRECTORY:
-			spew.Dump(m.Directory)
-		case format.RECORD_TYPE_FILE:
-			spew.Dump(m.File)
-		case format.RECORD_TYPE_SYMLINK:
-			spew.Dump(m.Symlink)
-		case format.RECORD_TYPE_HARDLINK:
-			spew.Dump(m.Hardlink)
-		case format.RECORD_TYPE_OS_SPECIAL:
-			spew.Dump(m.OSSpecial)
-		case format.RECORD_TYPE_CONTINUE:
-			return nil
-		case format.RECORD_TYPE_CONTROL:
-			if p.Flags == format.RECORD_FLAG_CONTROL_START {
-				spew.Dump(m.StartOfArchive)
-			}
-		default:
-			spew.Dump(m)
-		}
-		return nil
-	}
+	walkFun := detailedWalkFunc
 
 	err = r.Walk(walkFun)
 
@@ -70,10 +47,42 @@ func inspectArchive(cmd *cobra.Command, path string) {
 	}
 }
 
+func detailedWalkFunc(p *format.Preamble, m *format.RecordInfo) error {
+	switch p.Rtype {
+	case format.RECORD_TYPE_DIRECTORY:
+		spew.Dump(m.Directory)
+	case format.RECORD_TYPE_FILE:
+		spew.Dump(m.File)
+	case format.RECORD_TYPE_SYMLINK:
+		spew.Dump(m.Symlink)
+	case format.RECORD_TYPE_HARDLINK:
+		spew.Dump(m.Hardlink)
+	case format.RECORD_TYPE_OS_SPECIAL:
+		spew.Dump(m.OSSpecial)
+	case format.RECORD_TYPE_CONTINUE:
+		return nil
+	case format.RECORD_TYPE_CONTROL:
+		if p.Flags == format.RECORD_FLAG_CONTROL_START {
+			spew.Dump(m.StartOfArchive)
+		}
+	default:
+		spew.Dump(m)
+	}
+	return nil
+}
+
+type InspectCommandOptions struct {
+	detailed *bool
+}
+
+var inspectCmdOpts = InspectCommandOptions{}
+
 func init() {
 	rootCmd.AddCommand(inspectCmd)
 
 	// Here you will define your flags and configuration settings.
+
+	inspectCmdOpts.detailed = inspectCmd.Flags().Bool("detailed", false, "Print detailed information")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
