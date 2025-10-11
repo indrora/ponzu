@@ -39,9 +39,20 @@ func inspectArchive(cmd *cobra.Command, path string) {
 	r := reader.NewReader(fh)
 
 	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
-		spew.Config.MaxDepth = 2
-		spew.Dump(p)
+
 		switch p.Rtype {
+		case format.RECORD_TYPE_DIRECTORY:
+			spew.Dump(m.Directory)
+		case format.RECORD_TYPE_FILE:
+			spew.Dump(m.File)
+		case format.RECORD_TYPE_SYMLINK:
+			spew.Dump(m.Symlink)
+		case format.RECORD_TYPE_HARDLINK:
+			spew.Dump(m.Hardlink)
+		case format.RECORD_TYPE_OS_SPECIAL:
+			spew.Dump(m.OSSpecial)
+		case format.RECORD_TYPE_CONTINUE:
+			return nil
 		case format.RECORD_TYPE_CONTROL:
 			if p.Flags == format.RECORD_FLAG_CONTROL_START {
 				spew.Dump(m.StartOfArchive)

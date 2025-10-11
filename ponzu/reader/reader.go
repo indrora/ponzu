@@ -121,7 +121,7 @@ func (reader *Reader) Next() (rPreamble *format.Preamble, rInfo *format.RecordIn
 			return nil, nil, fmt.Errorf("%w: record information checksum failed, expected %x, got %x ", ErrHashMismatch, rPreamble.InfoChecksum, metaHashCheck)
 		}
 
-		rInfo, err = UnmarshalRecordInfo(rPreamble, cborDataBytes)
+		rInfo, err = format.UnmarshalRecordInfo(rPreamble, cborDataBytes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal record information: %w", err)
 		}

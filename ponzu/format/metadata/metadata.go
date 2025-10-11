@@ -75,6 +75,9 @@ type RecordMetadata struct {
 	DarwinMetadata
 }
 
-func GetMetadataForPath(filepath string) (any, error) {
-	return RecordMetadata{}, nil
+func GetMetadataForPath(filepath string) (*RecordMetadata, error) {
+	// Delegate to the osmeta package which handles platform-specific implementation
+	// Note: This requires importing the osmeta package
+	// For now, return empty metadata - the caller should use osmeta.GetMetadata directly
+	return &RecordMetadata{}, nil
 }

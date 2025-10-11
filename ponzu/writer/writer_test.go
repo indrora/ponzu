@@ -23,9 +23,7 @@ func TestWriter(t *testing.T) {
 
 	data := []byte{1, 2, 3, 4}
 
-	metadata := map[string]string{
-		"hello": "world",
-	}
+	metadata := &format.RecordInfo{}
 
 	if writer.AppendStart("test", "bueno") != nil {
 		t.Error("Failed to append SOA!")
@@ -64,14 +62,14 @@ func TestWriterEncode(t *testing.T) {
 
 	randData := make([]byte, int(1.75*float32(format.BLOCK_SIZE)))
 	crand.Read(randData)
-	fileinfo := format.File{
-		Name: metadata.MakePointer("foo"),
-
-		RecordBase: format.RecordBase{
-
-			Metadata: metadata.RecordMetadata{
-				CommonMetadata: metadata.CommonMetadata{
-					ModifiedTime: metadata.MakePointer(time.Now()),
+	fileinfo := &format.RecordInfo{
+		File: &format.File{
+			Name: metadata.MakePointer("foo"),
+			RecordBase: &format.RecordBase{
+				Metadata: &metadata.RecordMetadata{
+					CommonMetadata: metadata.CommonMetadata{
+						ModifiedTime: metadata.MakePointer(time.Now()),
+					},
 				},
 			},
 		},

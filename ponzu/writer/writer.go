@@ -5,11 +5,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"time"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/indrora/ponzu/osmeta"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/format/metadata"
-	"github.com/indrora/ponzu/ponzu/ioutil"
 	pio "github.com/indrora/ponzu/ponzu/ioutil"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
@@ -43,11 +44,16 @@ func (archive *ArchiveWriter) AppendStart(prefix string, comment string) error {
 	// write the initial header to the file.
 
 	// This is the CBOR portion.
-	archiveHeader := format.StartOfArchive{
-		Version: metadata.MakePointer(format.PONZU_VERSION),
-		Host:    metadata.MakePointer(format.HOST_OS_GENERIC),
-		Prefix:  metadata.MakePointer(prefix),
-		Comment: metadata.MakePointer(comment),
+	archiveHeader := &format.RecordInfo{
+		StartOfArchive: &format.StartOfArchive{
+			Version: metadata.MakePointer(format.PONZU_VERSION),
+			Host:    metadata.MakePointer(format.HOST_OS_GENERIC),
+			Prefix:  metadata.MakePointer(prefix),
+			Comment: metadata.MakePointer(comment),
+			RecordBase: &format.RecordBase{
+				Metadata: &metadata.RecordMetadata{CommonMetadata: metadata.CommonMetadata{CreatedTime: metadata.MakePointer(time.Now())}},
+			},
+		},
 	}
 
 	return archive.AppendBytes(format.RECORD_TYPE_CONTROL, format.RECORD_FLAG_CONTROL_START, format.COMPRESSION_NONE, archiveHeader, nil)
@@ -63,7 +69,7 @@ func (archive *ArchiveWriter) AppendBytes(
 	rtype format.RecordType,
 	flags format.RecordFlags,
 	compression format.CompressionType,
-	recordInfo any,
+	recordInfo *format.RecordInfo,
 	data []byte) error {
 
 	// Build preamble
@@ -71,18 +77,18 @@ func (archive *ArchiveWriter) AppendBytes(
 	// we may or may not have CBOR data, depending on if we have any metadata to append.
 
 	var err error
-	var cborData []byte
+
+	var cborData []byte = []byte{}
 
 	if recordInfo != nil {
 		// CBOR encode the metadata
-		cborData, err = cbor.Marshal(recordInfo)
-
+		cborData, err = format.MarshalRecordInfo(rtype, flags, recordInfo)
 		if err != nil {
-			return errors.Wrap(err, "Failed to marshal metadata to CBOR.")
+			return err
 		}
-	} else {
-		cborData = []byte{}
 	}
+
+	spew.Dump(recordInfo, cborData)
 
 	metadataChecksum := blake2b.Sum512(cborData)
 	metadataLengh := len(cborData)
@@ -142,9 +148,9 @@ func (archive *ArchiveWriter) AppendZstdDict(dictionary []byte) error {
 	return nil
 }
 
-func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format.RecordFlags, compression format.CompressionType, recordInfo any, stream io.Reader) error {
+func (archive *ArchiveWriter) AppendStream(rtype format.RecordType, flags format.RecordFlags, compression format.CompressionType, recordInfo *format.RecordInfo, stream io.Reader) error {
 
-	chunkReader := ioutil.NewBlockReader(stream, archive.MaxReadBuffer/2)
+	chunkReader := pio.NewBlockReader(stream, archive.MaxReadBuffer/2)
 
 	// Read at least the first chunk
 
@@ -188,18 +194,20 @@ func (archive *ArchiveWriter) AppendFile(path string, source string, compression
 	}
 	defer fstream.Close()
 
-	meta := format.File{
-		Name: metadata.MakePointer(path),
-		RecordBase: format.RecordBase{
-			Metadata: metadata.RecordMetadata{
-				CommonMetadata: metadata.CommonMetadata{
-					ModifiedTime: metadata.MakePointer(info.ModTime()),
-				},
-			},
+	meta, err := osmeta.GetMetadata(source)
+
+	if err != nil {
+		return err
+	}
+
+	rInfo := &format.RecordInfo{
+		File: &format.File{
+			Name:       metadata.MakePointer(path),
+			RecordBase: &format.RecordBase{Metadata: meta},
 		},
 	}
 
-	return archive.AppendStream(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, compressionType, meta, fstream)
+	return archive.AppendStream(format.RECORD_TYPE_FILE, format.RECORD_FLAG_NONE, compressionType, rInfo, fstream)
 }
 
 func (archive *ArchiveWriter) Close() error {

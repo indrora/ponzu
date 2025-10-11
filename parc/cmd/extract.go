@@ -35,7 +35,7 @@ func run(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	localLogger := GlobalLogger.With(zap.String("filename", args[0]))
+	localLogger := GlobalLogger.With(zap.String("archive", args[0]))
 
 	fh, err := os.OpenFile(args[0], os.O_RDONLY, os.ModeExclusive)
 	if err != nil {
@@ -60,15 +60,16 @@ func run(cmd *cobra.Command, args []string) {
 		// Do we need to override the prefix, or do we use the one from the COA?
 		overridePrefix := cmd.Flags().Changed("prefix")
 		if !overridePrefix {
-			cmdOpts.Prefix = coa.Prefix
+			extractCmdOpts.Prefix = coa.Prefix
 		}
 
 		// Say something
 		localLogger.Info("unpacking archive",
-			zap.String("prefix", *cmdOpts.Prefix),
+			zap.String("prefix", *extractCmdOpts.Prefix),
 			zap.String("comment", *coa.Comment),
 			zap.String("host", *coa.Host),
 			zap.Int("version", *coa.Version),
+			zap.Any("options", extractCmdOpts),
 		)
 
 	} else {
@@ -122,7 +123,6 @@ func run(cmd *cobra.Command, args []string) {
 
 				device := m.OSSpecial.Device
 				mode := m.OSSpecial.Mode
-				cmd.Printf("mknod device %s (dev=%v, mode=%v)\n", path, device, mode)
 				localLogger.Info("mknod device", zap.Stringp("path", path), zap.Uint32p("device", device), zap.Uint32p("mode", mode))
 			} else {
 				localLogger.Fatal("Unknown special type", zap.Stringp("type", specialType))
@@ -132,13 +132,13 @@ func run(cmd *cobra.Command, args []string) {
 		case format.RECORD_TYPE_HARDLINK:
 			path := m.Hardlink.Name
 			target := m.Hardlink.Target
-			cmd.Printf("Hard link: %s -> %s\n", path, target)
+			localLogger.Info("Hardlink", zap.Stringp("path", path), zap.Stringp("target", target))
 		case format.RECORD_TYPE_SYMLINK:
 			path := m.Symlink.Name
 			target := m.Symlink.Target
-			cmd.Printf("Symlink: %s -> %s\n", path, target)
+			localLogger.Info("symlink", zap.Stringp("path", path), zap.Stringp("target", target))
 		default:
-			cmd.PrintErrln("Encountered unknown record type... skipping")
+			localLogger.Warn("Unhandled record type type", zap.Uint8("type", uint8(p.Rtype)), zap.Any("info", m))
 		}
 
 		return nil
@@ -166,7 +166,7 @@ var FilterModeMap = map[string]FilterMode{
 	"exclude": FilterModeExclude,
 }
 
-type extractCmdOptions struct {
+type ExtractOptions struct {
 	Prefix         *string
 	ExtractPath    *string
 	ShouldFilter   *bool
@@ -174,13 +174,13 @@ type extractCmdOptions struct {
 	FilterMode     FilterMode
 }
 
-var cmdOpts = extractCmdOptions{FilterMode: FilterModeInclude}
+var extractCmdOpts = ExtractOptions{FilterMode: FilterModeInclude}
 
 func init() {
 	rootCmd.AddCommand(extractCmd)
-	cmdOpts.Prefix = extractCmd.Flags().String("prefix", "", "Force the specified prefix")
-	cmdOpts.ExtractPath = extractCmd.Flags().String("path", ".", "Extract to specified root path (in addition to prefix)")
-	cmdOpts.ShouldFilter = extractCmd.Flags().Bool("filter", false, "Filter paths")
-	cmdOpts.FilterPatterns = extractCmd.Flags().StringArray("filter-pattern", []string{}, "Pattern to include/exclude from extraction")
-	extractCmd.Flags().Var(eflag.NewEnumFlag(&cmdOpts.FilterMode, FilterModeInclude, "mode", FilterModeMap), "filter-mode", "Filter direction: include/exclude")
+	extractCmdOpts.Prefix = extractCmd.Flags().String("prefix", "", "Force the specified prefix")
+	extractCmdOpts.ExtractPath = extractCmd.Flags().String("path", ".", "Extract to specified root path (in addition to prefix)")
+	extractCmdOpts.ShouldFilter = extractCmd.Flags().Bool("filter", false, "Filter paths")
+	extractCmdOpts.FilterPatterns = extractCmd.Flags().StringArray("filter-pattern", []string{}, "Pattern to include/exclude from extraction")
+	extractCmd.Flags().Var(eflag.NewEnumFlag(&extractCmdOpts.FilterMode, FilterModeInclude, "mode", FilterModeMap), "filter-mode", "Filter direction: include/exclude")
 }
