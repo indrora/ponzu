@@ -46,7 +46,7 @@ func (archive *ArchiveWriter) AppendSymlink(path string, destination string, inf
 		},
 	}
 
-	err = archive.AppendBytes(format.RECORD_TYPE_DIRECTORY, format.RECORD_FLAG_NONE, format.COMPRESSION_NONE, rInfo, nil)
+	err = archive.AppendBytes(format.RECORD_TYPE_SYMLINK, format.RECORD_FLAG_NONE, format.COMPRESSION_NONE, rInfo, nil)
 
 	return err
 
