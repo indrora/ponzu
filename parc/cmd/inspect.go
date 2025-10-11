@@ -4,6 +4,7 @@ Copyright © 2022 Morgan Gangwere <morgan.gangwere@gmail.com>
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -38,13 +39,26 @@ func inspectArchive(cmd *cobra.Command, path string) {
 
 	r := reader.NewReader(fh)
 
-	walkFun := detailedWalkFunc
+	walkFun := shortWalkFunc //detailedWalkFunc
+
+	if *inspectCmdOpts.detailed {
+		walkFun = detailedWalkFunc
+	}
 
 	err = r.Walk(walkFun)
 
 	if err != nil {
 		panic(err)
 	}
+}
+
+func shortWalkFunc(_ *format.Preamble, i *format.RecordInfo) error {
+
+	//fmt.Printf("%v: %d blocks, %d modulo, %d bytes CBOR, %v compression)\n", RecordTypeToString(p.Rtype), p.DataLen, p.Modulo, p.InfoLength, p.Compression)
+
+	fmt.Println(RecordInfoToString(*i))
+
+	return nil
 }
 
 func detailedWalkFunc(p *format.Preamble, m *format.RecordInfo) error {
