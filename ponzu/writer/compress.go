@@ -37,8 +37,10 @@ func (archive *ArchiveWriter) getCompressedChunk(data []byte, compressor format.
 		if err != nil {
 			return nil, err
 		}
-		zs.Write(data)
-
+		_, err = zs.Write(data)
+		if err != nil {
+			return nil, err
+		}
 		zs.Close()
 
 		return buf.Bytes(), nil
