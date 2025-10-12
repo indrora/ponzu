@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/indrora/ponzu/osmeta"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/format/metadata"
@@ -88,7 +87,7 @@ func (archive *ArchiveWriter) AppendBytes(
 		}
 	}
 
-	spew.Dump(recordInfo, cborData)
+	//spew.Dump(recordInfo, cborData)
 
 	metadataChecksum := blake2b.Sum512(cborData)
 	metadataLengh := len(cborData)
