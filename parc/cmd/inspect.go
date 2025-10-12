@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -45,7 +46,14 @@ func inspectArchive(cmd *cobra.Command, path string) {
 		walkFun = detailedWalkFunc
 	}
 
-	err = r.Walk(walkFun)
+	err = r.Walk(func(p *format.Preamble, ri *format.RecordInfo) error {
+		if err := walkFun(p, ri); err != nil {
+			return err
+		} else if err = r.CopyAll(io.Discard, false); err != io.EOF && err != nil {
+			return err
+		}
+		return nil
+	})
 
 	if err != nil {
 		panic(err)

@@ -5,9 +5,12 @@ package cmd
 
 import (
 	"errors"
+	"io"
 	"os"
+	"path"
 
 	"github.com/indrora/ponzu/eflag"
+	"github.com/indrora/ponzu/osmeta"
 	"github.com/indrora/ponzu/ponzu/format"
 	"github.com/indrora/ponzu/ponzu/reader"
 	"github.com/spf13/cobra"
@@ -81,6 +84,10 @@ func run(cmd *cobra.Command, args []string) {
 		)
 	}
 
+	fullPath := path.Join(*extractCmdOpts.ExtractPath, *extractCmdOpts.Prefix)
+
+	_ = os.MkdirAll(fullPath, os.FileMode(*extractCmdOpts.FileMode))
+
 	walkFun := func(p *format.Preamble, m *format.RecordInfo) error {
 
 		localLogger.Debug(
@@ -89,6 +96,9 @@ func run(cmd *cobra.Command, args []string) {
 			zap.Binary("dataHash", p.DataChecksum[:]),
 			zap.Uint64("blocks", p.DataLen),
 		)
+
+		fMode := GetFileMode(m, *extractCmdOpts.FileMode)
+
 		switch p.Rtype {
 
 		case format.RECORD_TYPE_FILE:
@@ -99,10 +109,55 @@ func run(cmd *cobra.Command, args []string) {
 				zap.Stringp("filename", filename),
 				zap.Uint64p("filesize", filesize),
 			)
+			diskname := path.Join(fullPath, *filename)
+
+			// Try and get the directory that this is in
+			checkDir, _ := path.Split(diskname)
+
+			var fHandle *os.File
+
+			if chkstat, err := os.Stat(checkDir); err != nil {
+				err = os.MkdirAll(checkDir, os.FileMode(*extractCmdOpts.FileMode))
+				if err != nil {
+					localLogger.Fatal("Couldn't create directories", zap.Error(err))
+				}
+			} else {
+				if !chkstat.IsDir() {
+					localLogger.Fatal("target path exists and is not a directory!", zap.String("dir", checkDir))
+				}
+			}
+
+			fHandle, err = os.OpenFile(diskname, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+
+			if err != nil {
+				localLogger.Fatal("Failed to open output file", zap.Error(err))
+			}
+			err = r.CopyAll(fHandle, false)
+			if err != nil && err != io.EOF {
+				localLogger.Fatal("Failed to write output", zap.Error(err))
+			}
+			err = fHandle.Close()
+			if err != nil {
+				localLogger.Fatal("Failed to close output file", zap.Error(err))
+			}
+
+			if err = osmeta.SetMetadata(diskname, m.File.Metadata); err != nil {
+				localLogger.Fatal("Failed setting metadata", zap.Error(err))
+			}
 
 		case format.RECORD_TYPE_DIRECTORY:
 			filename := m.Directory.Name
+			diskname := path.Join(fullPath, *filename)
+			// Check if the directory already exists.
+
 			localLogger.Info("Create directory", zap.Stringp("path", filename))
+			if err = os.Mkdir(diskname, os.FileMode(fMode)); err != nil && !errors.Is(err, os.ErrExist) {
+				localLogger.Fatal("failed to create directory", zap.Error(err))
+			}
+			if err = osmeta.SetMetadata(diskname, m.Directory.Metadata); err != nil {
+				localLogger.Fatal("Failed to set OS metadata", zap.Error(err))
+			}
+
 		case format.RECORD_TYPE_CONTROL:
 			if p.Flags == format.RECORD_FLAG_CONTROL_START {
 				localLogger.Fatal("Control record out of sequence.")
@@ -124,19 +179,36 @@ func run(cmd *cobra.Command, args []string) {
 				device := m.OSSpecial.Device
 				mode := m.OSSpecial.Mode
 				localLogger.Info("mknod device", zap.Stringp("path", path), zap.Uint32p("device", device), zap.Uint32p("mode", mode))
+
 			} else {
 				localLogger.Fatal("Unknown special type", zap.Stringp("type", specialType))
 			}
 		case format.RECORD_TYPE_CONTINUE:
 			return nil
 		case format.RECORD_TYPE_HARDLINK:
-			path := m.Hardlink.Name
+			source := m.Hardlink.Name
 			target := m.Hardlink.Target
-			localLogger.Info("Hardlink", zap.Stringp("path", path), zap.Stringp("target", target))
+			localLogger.Info("Hardlink", zap.Stringp("path", source), zap.Stringp("target", target))
+
+			srcpath := path.Join(fullPath, *source)
+			targetpath := path.Join(fullPath, *target)
+
+			if err = os.Link(targetpath, srcpath); err != nil {
+				localLogger.Fatal("Failed to link", zap.Error(err))
+			}
+
 		case format.RECORD_TYPE_SYMLINK:
-			path := m.Symlink.Name
+			source := m.Symlink.Name
 			target := m.Symlink.Target
-			localLogger.Info("symlink", zap.Stringp("path", path), zap.Stringp("target", target))
+			localLogger.Info("Symlink", zap.Stringp("path", source), zap.Stringp("target", target))
+
+			srcpath := path.Join(fullPath, *source)
+			targetpath := path.Join(fullPath, *target)
+
+			if err = os.Link(targetpath, srcpath); err != nil {
+				localLogger.Fatal("Failed to link", zap.Error(err))
+			}
+
 		default:
 			localLogger.Warn("Unhandled record type type", zap.Uint8("type", uint8(p.Rtype)), zap.Any("info", m))
 		}
@@ -149,7 +221,6 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 //var forcedPrefix *string
@@ -172,6 +243,8 @@ type ExtractOptions struct {
 	ShouldFilter   *bool
 	FilterPatterns *[]string
 	FilterMode     FilterMode
+	FileMode       *uint32
+	OverrideMode   *bool
 }
 
 var extractCmdOpts = ExtractOptions{FilterMode: FilterModeInclude}
@@ -183,4 +256,5 @@ func init() {
 	extractCmdOpts.ShouldFilter = extractCmd.Flags().Bool("filter", false, "Filter paths")
 	extractCmdOpts.FilterPatterns = extractCmd.Flags().StringArray("filter-pattern", []string{}, "Pattern to include/exclude from extraction")
 	extractCmd.Flags().Var(eflag.NewEnumFlag(&extractCmdOpts.FilterMode, FilterModeInclude, "mode", FilterModeMap), "filter-mode", "Filter direction: include/exclude")
+	extractCmdOpts.FileMode = extractCmd.Flags().Uint32("file-mode", 0755, "Specify file mode (fallback). Use leading 0 for octal modes.")
 }

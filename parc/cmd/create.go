@@ -84,9 +84,7 @@ func createMain(cmd *cobra.Command, args []string) {
 	GlobalLogger.Info("Starting archive", zap.String("filename", archiveFilename))
 
 	// Write start of archive header.
-	writer.AppendStart(*createCmdOpts.ArchivePrefix, *createCmdOpts.ArchiveComment)
-
-	//zstdDict, _ := cmd.Flags().GetString("zstandard-dictionary")
+	writer.AppendStart(*createCmdOpts.ArchivePrefix, *createCmdOpts.ArchiveComment, getmachineHostOS())
 
 	if *createCmdOpts.ZstdDictPath != "" {
 		GlobalLogger.Debug("Adding Zstandard dictionary", zap.String("filename", *createCmdOpts.ZstdDictPath))

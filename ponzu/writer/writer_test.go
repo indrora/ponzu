@@ -25,7 +25,7 @@ func TestWriter(t *testing.T) {
 
 	metadata := &format.RecordInfo{}
 
-	if writer.AppendStart("test", "bueno") != nil {
+	if writer.AppendStart("test", "bueno", format.HOST_OS_GENERIC) != nil {
 		t.Error("Failed to append SOA!")
 		t.Fail()
 	}

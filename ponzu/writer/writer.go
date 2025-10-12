@@ -39,14 +39,14 @@ func NewWriter(file io.Writer, readBufferSize uint64) *ArchiveWriter {
 
 }
 
-func (archive *ArchiveWriter) AppendStart(prefix string, comment string) error {
+func (archive *ArchiveWriter) AppendStart(prefix string, comment string, host string) error {
 	// write the initial header to the file.
 
 	// This is the CBOR portion.
 	archiveHeader := &format.RecordInfo{
 		StartOfArchive: &format.StartOfArchive{
 			Version: metadata.MakePointer(format.PONZU_VERSION),
-			Host:    metadata.MakePointer(format.HOST_OS_GENERIC),
+			Host:    metadata.MakePointer(host),
 			Prefix:  metadata.MakePointer(prefix),
 			Comment: metadata.MakePointer(comment),
 			RecordBase: &format.RecordBase{
